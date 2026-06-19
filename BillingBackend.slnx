@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="BillingBackend/BillingBackend.csproj" />
+  <Project Path="BillingBackend.Data/BillingBackend.Data.csproj" />
 </Solution>
