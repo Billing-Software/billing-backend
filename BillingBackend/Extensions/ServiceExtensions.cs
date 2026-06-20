@@ -86,7 +86,7 @@ namespace BillingBackend.Extensions
                 {
                     policy.AllowAnyHeader()
                           .AllowAnyMethod()
-                          .WithOrigins("http://localhost:5173", "http://localhost:3000")
+                          .SetIsOriginAllowed(origin => true)
                           .AllowCredentials();
                 });
             });
