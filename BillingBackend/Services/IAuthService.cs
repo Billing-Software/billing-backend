@@ -7,5 +7,7 @@ namespace BillingBackend.Services
     {
         Task<AuthResponseDto?> RegisterAsync(RegisterDto registerDto);
         Task<AuthResponseDto?> LoginAsync(LoginDto loginDto);
+        Task<bool> UsernameExistsAsync(string username);
+        Task<bool> EmailExistsAsync(string email);
     }
 }

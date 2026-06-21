@@ -109,5 +109,15 @@ namespace BillingBackend.Services
                 BusinessName = businessName
             };
         }
+
+        public async Task<bool> UsernameExistsAsync(string username)
+        {
+            return await _userRepository.GetByUsernameAsync(username) != null;
+        }
+
+        public async Task<bool> EmailExistsAsync(string email)
+        {
+            return await _userRepository.GetByEmailAsync(email) != null;
+        }
     }
 }

@@ -45,5 +45,19 @@ namespace BillingBackend.Controllers
             }
             return Ok(result);
         }
+
+        [HttpGet("check-username")]
+        public async Task<ActionResult<bool>> CheckUsername([FromQuery] string username)
+        {
+            var exists = await _authService.UsernameExistsAsync(username);
+            return Ok(exists);
+        }
+
+        [HttpGet("check-email")]
+        public async Task<ActionResult<bool>> CheckEmail([FromQuery] string email)
+        {
+            var exists = await _authService.EmailExistsAsync(email);
+            return Ok(exists);
+        }
     }
 }
