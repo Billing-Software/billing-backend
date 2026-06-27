@@ -12,8 +12,8 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["BillingBackend/BillingBackend.csproj", "BillingBackend/"]
-RUN dotnet restore "./BillingBackend/BillingBackend.csproj"
+COPY ["BillingBackend.csproj", "."]
+RUN dotnet restore "BillingBackend.csproj"
 COPY . .
 WORKDIR "/src/BillingBackend"
 RUN dotnet build "./BillingBackend.csproj" -c $BUILD_CONFIGURATION -o /app/build
