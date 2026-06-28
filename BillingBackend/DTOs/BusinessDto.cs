@@ -47,5 +47,15 @@ namespace BillingBackend.DTOs
 
         public decimal DefaultTaxRate { get; set; } = 18.00m;
         public bool PricesIncludeTax { get; set; } = true;
+        [StringLength(500)]
+        public string? ReceiptHeader { get; set; }
+
+        [StringLength(500)]
+        public string? ReceiptFooter { get; set; }
+
+        public bool ShowLogoOnReceipt { get; set; } = true;
+
+        [StringLength(50)]
+        public string ReceiptTemplateType { get; set; } = "Thermal80mm";
     }
 }

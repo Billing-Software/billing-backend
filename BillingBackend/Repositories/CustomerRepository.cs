@@ -1,7 +1,7 @@
 using BillingBackend.Data;
 using BillingBackend.Data.Entities;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,60 +19,50 @@ namespace BillingBackend.Repositories
 
         public async Task<Customer?> GetByIdAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var results = await _context.Customers
-                .FromSqlRaw("EXEC dbo.sp_GetCustomerById @BusinessId, @Id", pBusinessId, pId)
-                .ToListAsync();
-            return results.FirstOrDefault();
+            return await _context.Customers.FirstOrDefaultAsync(c => c.BusinessId == businessId && c.Id == id);
         }
 
         public async Task<IEnumerable<Customer>> GetByBusinessIdAsync(int businessId)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            return await _context.Customers
-                .FromSqlRaw("EXEC dbo.sp_GetCustomersByBusinessId @BusinessId", pBusinessId)
-                .ToListAsync();
+            return await _context.Customers.Where(c => c.BusinessId == businessId).ToListAsync();
         }
 
         public async Task<Customer> AddAsync(Customer customer)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", customer.BusinessId);
-            var pName = new SqlParameter("@Name", customer.Name);
-            var pPhone = new SqlParameter("@Phone", customer.Phone ?? (object)System.DBNull.Value);
-            var pEmail = new SqlParameter("@Email", customer.Email ?? (object)System.DBNull.Value);
-            var pIsWalkIn = new SqlParameter("@IsWalkIn", customer.IsWalkIn);
-
-            var results = await _context.Customers
-                .FromSqlRaw("EXEC dbo.sp_CreateCustomer @BusinessId, @Name, @Phone, @Email, @IsWalkIn",
-                    pBusinessId, pName, pPhone, pEmail, pIsWalkIn)
-                .ToListAsync();
-            return results.First();
+            await _context.Customers.AddAsync(customer);
+            await _context.SaveChangesAsync();
+            return customer;
         }
 
         public async Task<Customer> UpdateAsync(Customer customer)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", customer.BusinessId);
-            var pId = new SqlParameter("@Id", customer.Id);
-            var pName = new SqlParameter("@Name", customer.Name);
-            var pPhone = new SqlParameter("@Phone", customer.Phone ?? (object)System.DBNull.Value);
-            var pEmail = new SqlParameter("@Email", customer.Email ?? (object)System.DBNull.Value);
-            var pIsWalkIn = new SqlParameter("@IsWalkIn", customer.IsWalkIn);
+            var existing = await _context.Customers.FirstOrDefaultAsync(c => c.BusinessId == customer.BusinessId && c.Id == customer.Id);
+            if (existing == null)
+            {
+                throw new KeyNotFoundException($"Customer with ID {customer.Id} for Business {customer.BusinessId} not found");
+            }
 
-            var results = await _context.Customers
-                .FromSqlRaw("EXEC dbo.sp_UpdateCustomer @BusinessId, @Id, @Name, @Phone, @Email, @IsWalkIn",
-                    pBusinessId, pId, pName, pPhone, pEmail, pIsWalkIn)
-                .ToListAsync();
-            return results.First();
+            existing.Name = customer.Name;
+            existing.Phone = customer.Phone;
+            existing.Email = customer.Email;
+            existing.IsWalkIn = customer.IsWalkIn;
+            existing.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return existing;
         }
 
         public async Task<bool> DeleteAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var result = await _context.Database.ExecuteSqlRawAsync(
-                "EXEC dbo.sp_DeleteCustomer @BusinessId, @Id", pBusinessId, pId);
-            return result > 0;
+            var existing = await _context.Customers.FirstOrDefaultAsync(c => c.BusinessId == businessId && c.Id == id);
+            if (existing == null)
+            {
+                return false;
+            }
+
+            _context.Customers.Remove(existing);
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

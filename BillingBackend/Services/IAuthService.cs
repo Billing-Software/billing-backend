@@ -9,5 +9,8 @@ namespace BillingBackend.Services
         Task<AuthResponseDto?> LoginAsync(LoginDto loginDto);
         Task<bool> UsernameExistsAsync(string username);
         Task<bool> EmailExistsAsync(string email);
+        Task<string?> ForgotPasswordAsync(string email);
+        Task<bool> ResetPasswordAsync(string email, string token, string newPassword);
+        Task<bool> ChangePasswordAsync(int userId, string currentPassword, string newPassword);
     }
 }

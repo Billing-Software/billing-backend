@@ -91,7 +91,7 @@ CREATE TABLE [dbo].[Services] (
     [BasePrice]     DECIMAL(18,2)   NOT NULL,
     [TaxRate]       DECIMAL(5,2)    NOT NULL DEFAULT 0,
     [Status]        NVARCHAR(20)    NOT NULL DEFAULT 'Active',
-    [IconName]      NVARCHAR(50)    NULL,
+    [IconName]      NVARCHAR(500)   NULL,
     [CreatedAt]     DATETIME2       NOT NULL DEFAULT GETUTCDATE(),
     [UpdatedAt]     DATETIME2       NULL,
     CONSTRAINT [PK_Services] PRIMARY KEY CLUSTERED ([Id]),

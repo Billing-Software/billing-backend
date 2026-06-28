@@ -1,5 +1,6 @@
 using BillingBackend.Data;
 using BillingBackend.Extensions;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +47,46 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<BillingDbContext>();
         context.Database.EnsureCreated();
+        // We commented out the DROP TABLE loop to prevent data loss.
+
+        //var tablesToDrop = new[] 
+        //{
+        //    "PurchaseItems", "Purchases", "Expenses", "WhatsAppTemplates", "WhatsAppSettings",
+        //    "BillItems", "Bills", "StaffMembers", "InventoryItems", "Services",
+        //    "Customers", "Branches", "Businesses", "Categories", "Users"
+        //};
+        //foreach (var table in tablesToDrop)
+        //{
+        //    try
+        //    {
+        //        context.Database.ExecuteSqlRaw($"DROP TABLE \"{table}\" CASCADE CONSTRAINTS");
+        //    }
+        //    catch { /* Ignore if table doesn't exist */}
+        //}
+        
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"StaffMembers\" DROP CONSTRAINT \"FK_Staff_Branches_BranchId\"");
+        }
+        catch { }
+
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"StaffMembers\" DROP COLUMN \"BranchId\"");
+        }
+        catch { }
+
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD \"PasswordResetToken\" VARCHAR2(100) NULL");
+        }
+        catch { }
+
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD \"PasswordResetTokenExpiry\" TIMESTAMP NULL");
+        }
+        catch { }
     }
     catch (Exception ex)
     {

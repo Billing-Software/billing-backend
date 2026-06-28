@@ -25,7 +25,7 @@ namespace BillingBackend.Services
             _durationInMinutes = config.GetValue<int>("Jwt:DurationInMinutes", 60);
         }
 
-        public string CreateToken(User user, int businessId)
+        public string CreateToken(User user, int businessId, int? staffId = null)
         {
             var claims = new List<Claim>
             {
@@ -35,6 +35,11 @@ namespace BillingBackend.Services
                 new Claim(ClaimTypes.Role, user.Role),
                 new Claim("businessId", businessId.ToString())
             };
+
+            if (staffId.HasValue)
+            {
+                claims.Add(new Claim("staffId", staffId.Value.ToString()));
+            }
 
             var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256Signature);
 

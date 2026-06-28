@@ -36,7 +36,7 @@ namespace BillingBackend.Data.Entities
         [MaxLength(20)]
         public string Status { get; set; } = "Active";
 
-        [MaxLength(50)]
+        [MaxLength(500)]
         public string? IconName { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

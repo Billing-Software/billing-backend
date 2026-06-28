@@ -3,8 +3,7 @@ using BillingBackend.DTOs;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Data.Common;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace BillingBackend.Repositories
@@ -21,109 +20,166 @@ namespace BillingBackend.Repositories
         public async Task<DashboardDataDto> GetDashboardDataAsync(int businessId)
         {
             var data = new DashboardDataDto();
-            var connection = _context.Database.GetDbConnection();
-            var wasOpen = connection.State == ConnectionState.Open;
-            if (!wasOpen) await connection.OpenAsync();
 
-            try
+            // 1. Summary Metrics
+            var billsQuery = _context.Bills.Where(b => b.BusinessId == businessId);
+            
+            var totalRevenue = await billsQuery.SumAsync(b => (decimal?)b.TotalAmount) ?? 0m;
+            var totalBills = await billsQuery.CountAsync();
+            var totalCustomers = await _context.Customers.CountAsync(c => c.BusinessId == businessId);
+            var lowStockCount = await _context.InventoryItems.CountAsync(i => i.BusinessId == businessId && i.CurrentStock <= i.ReorderLevel);
+
+            data.Summary = new DashboardSummaryDto
             {
-                using (var command = connection.CreateCommand())
+                TotalRevenue = totalRevenue,
+                TotalBills = totalBills,
+                TotalCustomers = totalCustomers,
+                LowStockCount = lowStockCount
+            };
+
+            // 2. Recent Bills (Top 5)
+            data.RecentBills = await billsQuery
+                .OrderByDescending(b => b.CreatedAt)
+                .Take(5)
+                .Select(b => new DashboardRecentBillDto
                 {
-                    command.CommandText = "dbo.sp_GetDashboardData";
-                    command.CommandType = CommandType.StoredProcedure;
-                    
-                    var pBusinessId = command.CreateParameter();
-                    pBusinessId.ParameterName = "@BusinessId";
-                    pBusinessId.Value = businessId;
-                    command.Parameters.Add(pBusinessId);
+                    Id = b.Id,
+                    BillNumber = b.BillNumber,
+                    TotalAmount = b.TotalAmount,
+                    CreatedAt = b.CreatedAt,
+                    Status = b.Status,
+                    CustomerName = b.Customer.Name,
+                    StaffName = b.CreatedByStaff != null ? b.CreatedByStaff.Name : "Owner"
+                })
+                .ToListAsync();
 
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        // 1. Summary Metrics
-                        if (await reader.ReadAsync())
-                        {
-                            data.Summary = new DashboardSummaryDto
-                            {
-                                TotalRevenue = Convert.ToDecimal(reader["TotalRevenue"]),
-                                TotalBills = Convert.ToInt32(reader["TotalBills"]),
-                                TotalCustomers = Convert.ToInt32(reader["TotalCustomers"]),
-                                LowStockCount = Convert.ToInt32(reader["LowStockCount"])
-                            };
-                        }
+            // 3. Top Selling Services (Top 5)
+            data.TopServices = await _context.BillItems
+                .Where(bi => bi.Bill.BusinessId == businessId)
+                .GroupBy(bi => new { bi.ServiceId, bi.ServiceName })
+                .Select(g => new DashboardTopServiceDto
+                {
+                    ServiceId = g.Key.ServiceId,
+                    ServiceName = g.Key.ServiceName,
+                    TotalQuantity = g.Sum(bi => bi.Quantity),
+                    TotalRevenue = g.Sum(bi => bi.LineTotal)
+                })
+                .OrderByDescending(s => s.TotalRevenue)
+                .Take(5)
+                .ToListAsync();
 
-                        // 2. Recent Bills
-                        if (await reader.NextResultAsync())
-                        {
-                            data.RecentBills = new List<DashboardRecentBillDto>();
-                            while (await reader.ReadAsync())
-                            {
-                                data.RecentBills.Add(new DashboardRecentBillDto
-                                {
-                                    Id = Convert.ToInt32(reader["Id"]),
-                                    BillNumber = Convert.ToString(reader["BillNumber"]) ?? string.Empty,
-                                    TotalAmount = Convert.ToDecimal(reader["TotalAmount"]),
-                                    CreatedAt = Convert.ToDateTime(reader["CreatedAt"]),
-                                    Status = Convert.ToString(reader["Status"]) ?? string.Empty,
-                                    CustomerName = Convert.ToString(reader["CustomerName"]) ?? string.Empty
-                                });
-                            }
-                        }
+            // 4. Low Stock Items (Top 5)
+            data.LowStockItems = await _context.InventoryItems
+                .Where(i => i.BusinessId == businessId && i.CurrentStock <= i.ReorderLevel)
+                .OrderBy(i => i.CurrentStock)
+                .Take(5)
+                .Select(i => new DashboardLowStockDto
+                {
+                    Id = i.Id,
+                    Name = i.Name,
+                    SKU = i.SKU,
+                    CurrentStock = i.CurrentStock,
+                    ReorderLevel = i.ReorderLevel,
+                    Unit = i.Unit
+                })
+                .ToListAsync();
 
-                        // 3. Top Selling Services
-                        if (await reader.NextResultAsync())
-                        {
-                            data.TopServices = new List<DashboardTopServiceDto>();
-                            while (await reader.ReadAsync())
-                            {
-                                data.TopServices.Add(new DashboardTopServiceDto
-                                {
-                                    ServiceId = Convert.ToInt32(reader["ServiceId"]),
-                                    ServiceName = Convert.ToString(reader["ServiceName"]) ?? string.Empty,
-                                    TotalQuantity = Convert.ToInt32(reader["TotalQuantity"]),
-                                    TotalRevenue = Convert.ToDecimal(reader["TotalRevenue"])
-                                });
-                            }
-                        }
+            // 5. Sales Trend (Last 30 Days)
+            var minDate = DateTime.UtcNow.Date.AddDays(-30);
+            var trendBills = await billsQuery
+                .Where(b => b.CreatedAt >= minDate)
+                .ToListAsync();
+                
+            data.SalesTrend = trendBills
+                .GroupBy(b => b.CreatedAt.Date)
+                .Select(g => new DashboardSalesTrendDto
+                {
+                    SalesDate = g.Key,
+                    BillsCount = g.Count(),
+                    DailyRevenue = g.Sum(b => b.TotalAmount)
+                })
+                .OrderBy(t => t.SalesDate)
+                .ToList();
 
-                        // 4. Low Stock Items
-                        if (await reader.NextResultAsync())
-                        {
-                            data.LowStockItems = new List<DashboardLowStockDto>();
-                            while (await reader.ReadAsync())
-                            {
-                                data.LowStockItems.Add(new DashboardLowStockDto
-                                {
-                                    Id = Convert.ToInt32(reader["Id"]),
-                                    Name = Convert.ToString(reader["Name"]) ?? string.Empty,
-                                    SKU = Convert.ToString(reader["SKU"]) ?? string.Empty,
-                                    CurrentStock = Convert.ToInt32(reader["CurrentStock"]),
-                                    ReorderLevel = Convert.ToInt32(reader["ReorderLevel"]),
-                                    Unit = Convert.ToString(reader["Unit"]) ?? string.Empty
-                                });
-                            }
-                        }
+            return data;
+        }
 
-                        // 5. Sales Trend
-                        if (await reader.NextResultAsync())
-                        {
-                            data.SalesTrend = new List<DashboardSalesTrendDto>();
-                            while (await reader.ReadAsync())
-                            {
-                                data.SalesTrend.Add(new DashboardSalesTrendDto
-                                {
-                                    SalesDate = Convert.ToDateTime(reader["SalesDate"]),
-                                    BillsCount = Convert.ToInt32(reader["BillsCount"]),
-                                    DailyRevenue = Convert.ToDecimal(reader["DailyRevenue"])
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            finally
+        public async Task<DashboardDataDto> GetStaffDashboardDataAsync(int businessId, int userId)
+        {
+            var data = new DashboardDataDto();
+
+            var staff = await _context.StaffMembers.FirstOrDefaultAsync(s => s.BusinessId == businessId && s.UserId == userId);
+            if (staff == null)
             {
-                if (!wasOpen) await connection.CloseAsync();
+                data.Summary = new DashboardSummaryDto();
+                data.RecentBills = new List<DashboardRecentBillDto>();
+                data.TopServices = new List<DashboardTopServiceDto>();
+                data.LowStockItems = new List<DashboardLowStockDto>();
+                data.SalesTrend = new List<DashboardSalesTrendDto>();
+                return data;
             }
+
+            var billsQuery = _context.Bills.Where(b => b.BusinessId == businessId && b.CreatedByStaffId == staff.Id);
+            
+            var totalRevenue = await billsQuery.SumAsync(b => (decimal?)b.TotalAmount) ?? 0m;
+            var totalBills = await billsQuery.CountAsync();
+            var totalCustomers = await billsQuery.Select(b => b.CustomerId).Distinct().CountAsync();
+            var lowStockCount = await _context.InventoryItems.CountAsync(i => i.BusinessId == businessId && i.CurrentStock <= i.ReorderLevel);
+
+            data.Summary = new DashboardSummaryDto
+            {
+                TotalRevenue = totalRevenue,
+                TotalBills = totalBills,
+                TotalCustomers = totalCustomers,
+                LowStockCount = lowStockCount
+            };
+
+            data.RecentBills = await billsQuery
+                .OrderByDescending(b => b.CreatedAt)
+                .Take(5)
+                .Select(b => new DashboardRecentBillDto
+                {
+                    Id = b.Id,
+                    BillNumber = b.BillNumber,
+                    TotalAmount = b.TotalAmount,
+                    CreatedAt = b.CreatedAt,
+                    Status = b.Status,
+                    CustomerName = b.Customer.Name,
+                    StaffName = staff.Name
+                })
+                .ToListAsync();
+
+            data.TopServices = await _context.BillItems
+                .Where(bi => bi.Bill.BusinessId == businessId && bi.Bill.CreatedByStaffId == staff.Id)
+                .GroupBy(bi => new { bi.ServiceId, bi.ServiceName })
+                .Select(g => new DashboardTopServiceDto
+                {
+                    ServiceId = g.Key.ServiceId,
+                    ServiceName = g.Key.ServiceName,
+                    TotalQuantity = g.Sum(bi => bi.Quantity),
+                    TotalRevenue = g.Sum(bi => bi.LineTotal)
+                })
+                .OrderByDescending(s => s.TotalRevenue)
+                .Take(5)
+                .ToListAsync();
+
+            data.LowStockItems = new List<DashboardLowStockDto>();
+
+            var minDate = DateTime.UtcNow.Date.AddDays(-30);
+            var trendBills = await billsQuery
+                .Where(b => b.CreatedAt >= minDate)
+                .ToListAsync();
+                
+            data.SalesTrend = trendBills
+                .GroupBy(b => b.CreatedAt.Date)
+                .Select(g => new DashboardSalesTrendDto
+                {
+                    SalesDate = g.Key,
+                    BillsCount = g.Count(),
+                    DailyRevenue = g.Sum(b => b.TotalAmount)
+                })
+                .OrderBy(t => t.SalesDate)
+                .ToList();
 
             return data;
         }

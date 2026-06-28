@@ -1,0 +1,2 @@
+WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="c:\Users\peketi\Downloads\SmartBillingProject\BillingBackend\wallet")))
+SSL_SERVER_DN_MATCH=yes

@@ -4,6 +4,6 @@ namespace BillingBackend.Services
 {
     public interface ITokenService
     {
-        string CreateToken(User user, int businessId);
+        string CreateToken(User user, int businessId, int? staffId = null);
     }
 }

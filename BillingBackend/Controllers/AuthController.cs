@@ -38,12 +38,19 @@ namespace BillingBackend.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponseDto>> Login(LoginDto loginDto)
         {
-            var result = await _authService.LoginAsync(loginDto);
-            if (result == null)
+            try
             {
-                return Unauthorized("Invalid username or password.");
+                var result = await _authService.LoginAsync(loginDto);
+                if (result == null)
+                {
+                    return Unauthorized("Invalid email or password.");
+                }
+                return Ok(result);
             }
-            return Ok(result);
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpGet("check-username")]
@@ -58,6 +65,47 @@ namespace BillingBackend.Controllers
         {
             var exists = await _authService.EmailExistsAsync(email);
             return Ok(exists);
+        }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
+        {
+            var code = await _authService.ForgotPasswordAsync(dto.Email);
+            if (code == null)
+            {
+                return BadRequest("Email not found.");
+            }
+            return Ok(new { message = "Password reset code sent successfully.", code = code });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
+        {
+            var success = await _authService.ResetPasswordAsync(dto.Email, dto.Token, dto.NewPassword);
+            if (!success)
+            {
+                return BadRequest("Invalid code or code has expired.");
+            }
+            return Ok(new { message = "Password reset successfully." });
+        }
+
+        [Microsoft.AspNetCore.Authorization.Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
+        {
+            var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (claim == null)
+            {
+                return Unauthorized();
+            }
+            int userId = int.Parse(claim.Value);
+
+            var success = await _authService.ChangePasswordAsync(userId, dto.CurrentPassword, dto.NewPassword);
+            if (!success)
+            {
+                return BadRequest("Incorrect current password.");
+            }
+            return Ok(new { message = "Password updated successfully." });
         }
     }
 }

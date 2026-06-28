@@ -1,3 +1,4 @@
+using System;
 using BillingBackend.DTOs;
 using BillingBackend.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -33,16 +34,30 @@ namespace BillingBackend.Controllers
         [HttpPost]
         public async Task<ActionResult<InventoryDto>> Create(InventoryDto dto)
         {
-            var created = await _inventoryService.AddAsync(CurrentBusinessId, dto);
-            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            try
+            {
+                var created = await _inventoryService.AddAsync(CurrentBusinessId, dto);
+                return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult<InventoryDto>> Update(int id, InventoryDto dto)
         {
-            dto.Id = id;
-            var updated = await _inventoryService.UpdateAsync(CurrentBusinessId, dto);
-            return Ok(updated);
+            try
+            {
+                dto.Id = id;
+                var updated = await _inventoryService.UpdateAsync(CurrentBusinessId, dto);
+                return Ok(updated);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         [HttpDelete("{id}")]

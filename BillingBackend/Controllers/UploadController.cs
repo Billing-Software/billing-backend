@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
 using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using SixLabors.ImageSharp;
 
 namespace BillingBackend.Controllers
 {
@@ -45,13 +47,14 @@ namespace BillingBackend.Controllers
                 }
 
                 // Generate unique filename
-                var uniqueFileName = $"{Guid.NewGuid()}{extension}";
+                var uniqueFileName = $"{Guid.NewGuid()}.webp";
                 var filePath = Path.Combine(uploadsFolder, uniqueFileName);
 
-                // Save to local filesystem
-                using (var stream = new FileStream(filePath, FileMode.Create))
+                // Save to local filesystem after converting to webp
+                using (var stream = file.OpenReadStream())
+                using (var image = await Image.LoadAsync(stream))
                 {
-                    await file.CopyToAsync(stream);
+                    await image.SaveAsWebpAsync(filePath);
                 }
 
                 // Build dynamic hosted URL

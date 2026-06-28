@@ -1,7 +1,7 @@
 using BillingBackend.Data;
 using BillingBackend.Data.Entities;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,66 +19,59 @@ namespace BillingBackend.Repositories
 
         public async Task<InventoryItem?> GetByIdAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var results = await _context.InventoryItems
-                .FromSqlRaw("EXEC dbo.sp_GetInventoryItemById @BusinessId, @Id", pBusinessId, pId)
-                .ToListAsync();
-            return results.FirstOrDefault();
+            return await _context.InventoryItems.FirstOrDefaultAsync(i => i.BusinessId == businessId && i.Id == id);
+        }
+
+        public async Task<InventoryItem?> GetBySKUAsync(int businessId, string sku)
+        {
+            return await _context.InventoryItems
+                .FirstOrDefaultAsync(i => i.BusinessId == businessId && i.SKU.ToLower() == sku.ToLower());
         }
 
         public async Task<IEnumerable<InventoryItem>> GetByBusinessIdAsync(int businessId)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            return await _context.InventoryItems
-                .FromSqlRaw("EXEC dbo.sp_GetInventoryItemsByBusinessId @BusinessId", pBusinessId)
-                .ToListAsync();
+            return await _context.InventoryItems.Where(i => i.BusinessId == businessId).ToListAsync();
         }
 
         public async Task<InventoryItem> AddAsync(InventoryItem item)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", item.BusinessId);
-            var pName = new SqlParameter("@Name", item.Name);
-            var pSKU = new SqlParameter("@SKU", item.SKU);
-            var pCategory = new SqlParameter("@Category", item.Category);
-            var pCurrentStock = new SqlParameter("@CurrentStock", item.CurrentStock);
-            var pUnit = new SqlParameter("@Unit", item.Unit);
-            var pReorderLevel = new SqlParameter("@ReorderLevel", item.ReorderLevel);
-            var pImageUrl = new SqlParameter("@ImageUrl", item.ImageUrl ?? (object)System.DBNull.Value);
-
-            var results = await _context.InventoryItems
-                .FromSqlRaw("EXEC dbo.sp_CreateInventoryItem @BusinessId, @Name, @SKU, @Category, @CurrentStock, @Unit, @ReorderLevel, @ImageUrl",
-                    pBusinessId, pName, pSKU, pCategory, pCurrentStock, pUnit, pReorderLevel, pImageUrl)
-                .ToListAsync();
-            return results.First();
+            await _context.InventoryItems.AddAsync(item);
+            await _context.SaveChangesAsync();
+            return item;
         }
 
         public async Task<InventoryItem> UpdateAsync(InventoryItem item)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", item.BusinessId);
-            var pId = new SqlParameter("@Id", item.Id);
-            var pName = new SqlParameter("@Name", item.Name);
-            var pSKU = new SqlParameter("@SKU", item.SKU);
-            var pCategory = new SqlParameter("@Category", item.Category);
-            var pCurrentStock = new SqlParameter("@CurrentStock", item.CurrentStock);
-            var pUnit = new SqlParameter("@Unit", item.Unit);
-            var pReorderLevel = new SqlParameter("@ReorderLevel", item.ReorderLevel);
-            var pImageUrl = new SqlParameter("@ImageUrl", item.ImageUrl ?? (object)System.DBNull.Value);
+            var existing = await _context.InventoryItems.FirstOrDefaultAsync(i => i.BusinessId == item.BusinessId && i.Id == item.Id);
+            if (existing == null)
+            {
+                throw new KeyNotFoundException($"Inventory item with ID {item.Id} for Business {item.BusinessId} not found");
+            }
 
-            var results = await _context.InventoryItems
-                .FromSqlRaw("EXEC dbo.sp_UpdateInventoryItem @BusinessId, @Id, @Name, @SKU, @Category, @CurrentStock, @Unit, @ReorderLevel, @ImageUrl",
-                    pBusinessId, pId, pName, pSKU, pCategory, pCurrentStock, pUnit, pReorderLevel, pImageUrl)
-                .ToListAsync();
-            return results.First();
+            existing.Name = item.Name;
+            existing.SKU = item.SKU;
+            existing.Category = item.Category;
+            existing.CurrentStock = item.CurrentStock;
+            existing.Unit = item.Unit;
+            existing.ReorderLevel = item.ReorderLevel;
+            existing.ImageUrl = item.ImageUrl;
+            existing.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return existing;
         }
 
         public async Task<bool> DeleteAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var result = await _context.Database.ExecuteSqlRawAsync(
-                "EXEC dbo.sp_DeleteInventoryItem @BusinessId, @Id", pBusinessId, pId);
-            return result > 0;
+            var existing = await _context.InventoryItems.FirstOrDefaultAsync(i => i.BusinessId == businessId && i.Id == id);
+            if (existing == null)
+            {
+                return false;
+            }
+
+            _context.InventoryItems.Remove(existing);
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

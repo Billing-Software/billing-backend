@@ -2,7 +2,6 @@ using BillingBackend.Data;
 using BillingBackend.Data.Entities;
 using BillingBackend.DTOs;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.SqlClient;
 using System;
 using System.Threading.Tasks;
 
@@ -39,61 +38,104 @@ namespace BillingBackend.Repositories
 
         public async Task<UserRegisterResultDto?> RegisterUserAndBusinessAsync(RegisterDto registerDto, byte[] passwordHash, byte[] passwordSalt)
         {
-            var connection = _context.Database.GetDbConnection();
-            var wasOpen = connection.State == System.Data.ConnectionState.Open;
-            if (!wasOpen) await connection.OpenAsync();
-
-            try
+            using (var transaction = await _context.Database.BeginTransactionAsync())
             {
-                using (var command = connection.CreateCommand())
+                try
                 {
-                    command.CommandText = "dbo.sp_RegisterUserAndBusiness";
-                    command.CommandType = System.Data.CommandType.StoredProcedure;
-
-                    command.Parameters.Add(new SqlParameter("@Username", registerDto.Username));
-                    command.Parameters.Add(new SqlParameter("@Email", registerDto.Email));
-                    command.Parameters.Add(new SqlParameter("@PasswordHash", passwordHash));
-                    command.Parameters.Add(new SqlParameter("@PasswordSalt", passwordSalt));
-                    command.Parameters.Add(new SqlParameter("@Role", registerDto.Role));
-                    command.Parameters.Add(new SqlParameter("@LegalName", registerDto.LegalName));
-                    command.Parameters.Add(new SqlParameter("@TradingName", registerDto.TradingName ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@Address", registerDto.BusinessAddress ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@City", registerDto.BusinessCity ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@State", registerDto.BusinessState ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@PostalCode", registerDto.BusinessPostalCode ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@Country", registerDto.BusinessCountry ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@Phone", registerDto.BusinessPhone ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@GstIn", registerDto.GstIn ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@LogoUrl", registerDto.LogoUrl ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@Website", registerDto.Website ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@BusinessEmail", registerDto.BusinessEmail ?? (object)System.DBNull.Value));
-                    command.Parameters.Add(new SqlParameter("@DefaultTaxRate", registerDto.DefaultTaxRate));
-                    command.Parameters.Add(new SqlParameter("@PricesIncludeTax", registerDto.PricesIncludeTax));
-
-                    using (var reader = await command.ExecuteReaderAsync())
+                    // 1. Insert User
+                    var user = new User
                     {
-                        if (await reader.ReadAsync())
-                        {
-                            return new UserRegisterResultDto
-                            {
-                                UserId = Convert.ToInt32(reader["UserId"]),
-                                Username = Convert.ToString(reader["Username"]) ?? string.Empty,
-                                Email = Convert.ToString(reader["Email"]) ?? string.Empty,
-                                Role = Convert.ToString(reader["Role"]) ?? string.Empty,
-                                BusinessId = Convert.ToInt32(reader["BusinessId"]),
-                                BusinessName = Convert.ToString(reader["BusinessName"]) ?? string.Empty,
-                                DefaultBranchId = Convert.ToInt32(reader["DefaultBranchId"])
-                            };
-                        }
-                    }
+                        Username = registerDto.Username,
+                        Email = registerDto.Email,
+                        PasswordHash = passwordHash,
+                        PasswordSalt = passwordSalt,
+                        Role = string.IsNullOrEmpty(registerDto.Role) ? "Owner" : registerDto.Role
+                    };
+                    await _context.Users.AddAsync(user);
+                    await _context.SaveChangesAsync();
+
+                    // 2. Insert Business
+                    var business = new Business
+                    {
+                        OwnerId = user.Id,
+                        LegalName = registerDto.LegalName,
+                        TradingName = registerDto.TradingName,
+                        LogoUrl = registerDto.LogoUrl,
+                        Address = registerDto.BusinessAddress,
+                        City = registerDto.BusinessCity,
+                        State = registerDto.BusinessState,
+                        PostalCode = registerDto.BusinessPostalCode,
+                        Country = registerDto.BusinessCountry ?? "India",
+                        Phone = registerDto.BusinessPhone,
+                        Email = registerDto.BusinessEmail ?? registerDto.Email,
+                        Website = registerDto.Website,
+                        GstIn = registerDto.GstIn,
+                        DefaultTaxRate = registerDto.DefaultTaxRate,
+                        PricesIncludeTax = registerDto.PricesIncludeTax
+                    };
+                    await _context.Businesses.AddAsync(business);
+                    await _context.SaveChangesAsync();
+
+                    // 3. Insert Default Branch
+                    var branch = new Branch
+                    {
+                        BusinessId = business.Id,
+                        Name = "Main Branch",
+                        Address = registerDto.BusinessAddress,
+                        City = registerDto.BusinessCity,
+                        PostalCode = registerDto.BusinessPostalCode,
+                        Phone = registerDto.BusinessPhone,
+                        IsActive = true
+                    };
+                    await _context.Branches.AddAsync(branch);
+                    await _context.SaveChangesAsync();
+
+                    // 4. Insert Default Walk-In Customer
+                    var customer = new Customer
+                    {
+                        BusinessId = business.Id,
+                        Name = "Walk-In Customer",
+                        Phone = "N/A",
+                        Email = null,
+                        IsWalkIn = true
+                    };
+                    await _context.Customers.AddAsync(customer);
+
+                    // 5. Insert WhatsApp Settings
+                    var waSettings = new WhatsAppSettings
+                    {
+                        BusinessId = business.Id,
+                        ApiKey = null,
+                        IsConnected = false
+                    };
+                    await _context.WhatsAppSettings.AddAsync(waSettings);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return new UserRegisterResultDto
+                    {
+                        UserId = user.Id,
+                        Username = user.Username,
+                        Email = user.Email,
+                        Role = user.Role,
+                        BusinessId = business.Id,
+                        BusinessName = business.LegalName,
+                        DefaultBranchId = branch.Id
+                    };
+                }
+                catch (DbUpdateException dbEx)
+                {
+                    await transaction.RollbackAsync();
+                    var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                    throw new Exception($"Database update failed: {inner}", dbEx);
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    throw;
                 }
             }
-            finally
-            {
-                if (!wasOpen) await connection.CloseAsync();
-            }
-
-            return null;
         }
 
         public async Task SaveChangesAsync()

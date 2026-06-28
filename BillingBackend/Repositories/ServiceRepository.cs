@@ -1,7 +1,7 @@
 using BillingBackend.Data;
 using BillingBackend.Data.Entities;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,66 +19,59 @@ namespace BillingBackend.Repositories
 
         public async Task<Service?> GetByIdAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var results = await _context.Services
-                .FromSqlRaw("EXEC dbo.sp_GetServiceById @BusinessId, @Id", pBusinessId, pId)
-                .ToListAsync();
-            return results.FirstOrDefault();
+            return await _context.Services.FirstOrDefaultAsync(s => s.BusinessId == businessId && s.Id == id);
+        }
+
+        public async Task<Service?> GetBySKUAsync(int businessId, string sku)
+        {
+            return await _context.Services
+                .FirstOrDefaultAsync(s => s.BusinessId == businessId && s.SKU.ToLower() == sku.ToLower());
         }
 
         public async Task<IEnumerable<Service>> GetByBusinessIdAsync(int businessId)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            return await _context.Services
-                .FromSqlRaw("EXEC dbo.sp_GetServicesByBusinessId @BusinessId", pBusinessId)
-                .ToListAsync();
+            return await _context.Services.Where(s => s.BusinessId == businessId).ToListAsync();
         }
 
         public async Task<Service> AddAsync(Service service)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", service.BusinessId);
-            var pName = new SqlParameter("@Name", service.Name);
-            var pSKU = new SqlParameter("@SKU", service.SKU);
-            var pCategory = new SqlParameter("@Category", service.Category);
-            var pBasePrice = new SqlParameter("@BasePrice", service.BasePrice);
-            var pTaxRate = new SqlParameter("@TaxRate", service.TaxRate);
-            var pStatus = new SqlParameter("@Status", service.Status);
-            var pIconName = new SqlParameter("@IconName", service.IconName ?? (object)System.DBNull.Value);
-
-            var results = await _context.Services
-                .FromSqlRaw("EXEC dbo.sp_CreateService @BusinessId, @Name, @SKU, @Category, @BasePrice, @TaxRate, @Status, @IconName",
-                    pBusinessId, pName, pSKU, pCategory, pBasePrice, pTaxRate, pStatus, pIconName)
-                .ToListAsync();
-            return results.First();
+            await _context.Services.AddAsync(service);
+            await _context.SaveChangesAsync();
+            return service;
         }
 
         public async Task<Service> UpdateAsync(Service service)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", service.BusinessId);
-            var pId = new SqlParameter("@Id", service.Id);
-            var pName = new SqlParameter("@Name", service.Name);
-            var pSKU = new SqlParameter("@SKU", service.SKU);
-            var pCategory = new SqlParameter("@Category", service.Category);
-            var pBasePrice = new SqlParameter("@BasePrice", service.BasePrice);
-            var pTaxRate = new SqlParameter("@TaxRate", service.TaxRate);
-            var pStatus = new SqlParameter("@Status", service.Status);
-            var pIconName = new SqlParameter("@IconName", service.IconName ?? (object)System.DBNull.Value);
+            var existing = await _context.Services.FirstOrDefaultAsync(s => s.BusinessId == service.BusinessId && s.Id == service.Id);
+            if (existing == null)
+            {
+                throw new KeyNotFoundException($"Service with ID {service.Id} for Business {service.BusinessId} not found");
+            }
 
-            var results = await _context.Services
-                .FromSqlRaw("EXEC dbo.sp_UpdateService @BusinessId, @Id, @Name, @SKU, @Category, @BasePrice, @TaxRate, @Status, @IconName",
-                    pBusinessId, pId, pName, pSKU, pCategory, pBasePrice, pTaxRate, pStatus, pIconName)
-                .ToListAsync();
-            return results.First();
+            existing.Name = service.Name;
+            existing.SKU = service.SKU;
+            existing.Category = service.Category;
+            existing.BasePrice = service.BasePrice;
+            existing.TaxRate = service.TaxRate;
+            existing.Status = service.Status;
+            existing.IconName = service.IconName;
+            existing.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return existing;
         }
 
         public async Task<bool> DeleteAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var result = await _context.Database.ExecuteSqlRawAsync(
-                "EXEC dbo.sp_DeleteService @BusinessId, @Id", pBusinessId, pId);
-            return result > 0;
+            var existing = await _context.Services.FirstOrDefaultAsync(s => s.BusinessId == businessId && s.Id == id);
+            if (existing == null)
+            {
+                return false;
+            }
+
+            _context.Services.Remove(existing);
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

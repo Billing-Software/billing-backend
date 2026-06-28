@@ -21,6 +21,10 @@ namespace BillingBackend.Data
         public DbSet<BillItem> BillItems { get; set; }
         public DbSet<WhatsAppSettings> WhatsAppSettings { get; set; }
         public DbSet<WhatsAppTemplate> WhatsAppTemplates { get; set; }
+        public DbSet<Expense> Expenses { get; set; }
+        public DbSet<Purchase> Purchases { get; set; }
+        public DbSet<PurchaseItem> PurchaseItems { get; set; }
+        public DbSet<Category> Categories { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -165,6 +169,32 @@ namespace BillingBackend.Data
                 entity.HasOne(t => t.WhatsAppSettings)
                     .WithMany(w => w.Templates)
                     .HasForeignKey(t => t.WhatsAppSettingsId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+            // ===== Expenses =====
+            modelBuilder.Entity<Expense>(entity =>
+            {
+                entity.HasOne(e => e.Business)
+                    .WithMany()
+                    .HasForeignKey(e => e.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ===== Purchases =====
+            modelBuilder.Entity<Purchase>(entity =>
+            {
+                entity.HasOne(p => p.Business)
+                    .WithMany()
+                    .HasForeignKey(p => p.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ===== PurchaseItems =====
+            modelBuilder.Entity<PurchaseItem>(entity =>
+            {
+                entity.HasOne(pi => pi.Purchase)
+                    .WithMany(p => p.Items)
+                    .HasForeignKey(pi => pi.PurchaseId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }

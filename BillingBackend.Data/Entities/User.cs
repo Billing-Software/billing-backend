@@ -26,6 +26,11 @@ namespace BillingBackend.Data.Entities
         [MaxLength(50)]
         public string Role { get; set; } = "Owner";
 
+        [MaxLength(100)]
+        public string? PasswordResetToken { get; set; }
+
+        public DateTime? PasswordResetTokenExpiry { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation: 1:1 with Business (this user owns a business)

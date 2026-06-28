@@ -8,5 +8,6 @@ namespace BillingBackend.DTOs
         public string Role { get; set; } = string.Empty;
         public int BusinessId { get; set; }
         public string BusinessName { get; set; } = string.Empty;
+        public int? StaffId { get; set; }
     }
 }

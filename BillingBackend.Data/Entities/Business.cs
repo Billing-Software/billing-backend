@@ -55,6 +55,16 @@ namespace BillingBackend.Data.Entities
 
         public bool PricesIncludeTax { get; set; } = true;
 
+        [MaxLength(500)]
+        public string? ReceiptHeader { get; set; }
+
+        [MaxLength(500)]
+        public string? ReceiptFooter { get; set; }
+
+        public bool ShowLogoOnReceipt { get; set; } = true;
+
+        [MaxLength(50)]
+        public string ReceiptTemplateType { get; set; } = "Thermal80mm";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
 

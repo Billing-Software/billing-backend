@@ -15,7 +15,7 @@ CREATE PROCEDURE dbo.sp_CreateService
     @BasePrice DECIMAL(18,2),
     @TaxRate DECIMAL(5,2),
     @Status NVARCHAR(20),
-    @IconName NVARCHAR(50) = NULL
+    @IconName NVARCHAR(500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -79,7 +79,7 @@ CREATE PROCEDURE dbo.sp_UpdateService
     @BasePrice DECIMAL(18,2),
     @TaxRate DECIMAL(5,2),
     @Status NVARCHAR(20),
-    @IconName NVARCHAR(50) = NULL
+    @IconName NVARCHAR(500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;

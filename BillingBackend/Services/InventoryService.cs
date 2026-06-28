@@ -1,3 +1,4 @@
+using System;
 using BillingBackend.Data.Entities;
 using BillingBackend.DTOs;
 using BillingBackend.Repositories;
@@ -30,6 +31,11 @@ namespace BillingBackend.Services
 
         public async Task<InventoryDto> AddAsync(int businessId, InventoryDto dto)
         {
+            var existing = await _inventoryRepository.GetBySKUAsync(businessId, dto.SKU);
+            if (existing != null)
+            {
+                throw new InvalidOperationException("An inventory item with this SKU already exists.");
+            }
             var item = new InventoryItem
             {
                 BusinessId = businessId,
@@ -48,6 +54,11 @@ namespace BillingBackend.Services
 
         public async Task<InventoryDto> UpdateAsync(int businessId, InventoryDto dto)
         {
+            var existing = await _inventoryRepository.GetBySKUAsync(businessId, dto.SKU);
+            if (existing != null && existing.Id != dto.Id)
+            {
+                throw new InvalidOperationException("An inventory item with this SKU already exists.");
+            }
             var item = new InventoryItem
             {
                 Id = dto.Id,

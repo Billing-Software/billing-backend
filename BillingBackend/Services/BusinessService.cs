@@ -41,7 +41,11 @@ namespace BillingBackend.Services
                 Website = dto.Website,
                 GstIn = dto.GstIn,
                 DefaultTaxRate = dto.DefaultTaxRate,
-                PricesIncludeTax = dto.PricesIncludeTax
+                PricesIncludeTax = dto.PricesIncludeTax,
+                ReceiptHeader = dto.ReceiptHeader,
+                ReceiptFooter = dto.ReceiptFooter,
+                ShowLogoOnReceipt = dto.ShowLogoOnReceipt,
+                ReceiptTemplateType = dto.ReceiptTemplateType ?? "Thermal80mm"
             };
 
             var updated = await _businessRepository.UpdateAsync(business);
@@ -67,7 +71,11 @@ namespace BillingBackend.Services
                 Website = b.Website,
                 GstIn = b.GstIn,
                 DefaultTaxRate = b.DefaultTaxRate,
-                PricesIncludeTax = b.PricesIncludeTax
+                PricesIncludeTax = b.PricesIncludeTax,
+                ReceiptHeader = b.ReceiptHeader,
+                ReceiptFooter = b.ReceiptFooter,
+                ShowLogoOnReceipt = b.ShowLogoOnReceipt,
+                ReceiptTemplateType = b.ReceiptTemplateType
             };
         }
     }

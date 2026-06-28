@@ -17,5 +17,10 @@ namespace BillingBackend.Services
         {
             return await _dashboardRepository.GetDashboardDataAsync(businessId);
         }
+
+        public async Task<DashboardDataDto> GetStaffDashboardDataAsync(int businessId, int userId)
+        {
+            return await _dashboardRepository.GetStaffDashboardDataAsync(businessId, userId);
+        }
     }
 }

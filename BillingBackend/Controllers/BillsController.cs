@@ -16,9 +16,18 @@ namespace BillingBackend.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<BillDto>>> GetAll()
+        public async Task<ActionResult<IEnumerable<BillDto>>> GetAll(
+            [FromQuery] int? customerId = null,
+            [FromQuery] int? staffId = null,
+            [FromQuery] int? branchId = null,
+            [FromQuery] System.DateTime? startDate = null,
+            [FromQuery] System.DateTime? endDate = null,
+            [FromQuery] string? status = null,
+            [FromQuery] decimal? minAmount = null,
+            [FromQuery] decimal? maxAmount = null)
         {
-            var bills = await _billService.GetByBusinessIdAsync(CurrentBusinessId);
+            var bills = await _billService.GetByBusinessIdAsync(
+                CurrentBusinessId, customerId, staffId, branchId, startDate, endDate, status, minAmount, maxAmount);
             return Ok(bills);
         }
 

@@ -25,7 +25,7 @@ namespace BillingBackend.DTOs
         [StringLength(20)]
         public string Status { get; set; } = "Active";
 
-        [StringLength(50)]
+        [StringLength(500)]
         public string? IconName { get; set; }
     }
 }

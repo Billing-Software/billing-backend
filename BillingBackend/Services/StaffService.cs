@@ -41,7 +41,7 @@ namespace BillingBackend.Services
                 Status = dto.Status
             };
 
-            var added = await _staffRepository.AddAsync(staff);
+            var added = await _staffRepository.AddAsync(staff, dto.Password ?? "123456");
             return MapToDto(added);
         }
 
@@ -59,7 +59,7 @@ namespace BillingBackend.Services
                 Status = dto.Status
             };
 
-            var updated = await _staffRepository.UpdateAsync(staff);
+            var updated = await _staffRepository.UpdateAsync(staff, dto.Password);
             return MapToDto(updated);
         }
 

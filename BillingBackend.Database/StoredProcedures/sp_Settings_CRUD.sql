@@ -38,7 +38,11 @@ CREATE PROCEDURE dbo.sp_UpdateBusinessProfile
     @Website NVARCHAR(500) = NULL,
     @GstIn NVARCHAR(50) = NULL,
     @DefaultTaxRate DECIMAL(5,2),
-    @PricesIncludeTax BIT
+    @PricesIncludeTax BIT,
+    @ReceiptHeader NVARCHAR(500) = NULL,
+    @ReceiptFooter NVARCHAR(500) = NULL,
+    @ShowLogoOnReceipt BIT = 1,
+    @ReceiptTemplateType NVARCHAR(50) = 'Thermal80mm'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -58,6 +62,10 @@ BEGIN
         [GstIn] = @GstIn,
         [DefaultTaxRate] = @DefaultTaxRate,
         [PricesIncludeTax] = @PricesIncludeTax,
+        [ReceiptHeader] = @ReceiptHeader,
+        [ReceiptFooter] = @ReceiptFooter,
+        [ShowLogoOnReceipt] = @ShowLogoOnReceipt,
+        [ReceiptTemplateType] = @ReceiptTemplateType,
         [UpdatedAt] = GETUTCDATE()
     WHERE [Id] = @BusinessId;
     

@@ -1,11 +1,8 @@
 using BillingBackend.Data;
 using BillingBackend.Data.Entities;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -22,161 +19,167 @@ namespace BillingBackend.Repositories
 
         public async Task<Bill?> GetByIdAsync(int businessId, int id)
         {
-            var connection = _context.Database.GetDbConnection();
-            var wasOpen = connection.State == ConnectionState.Open;
-            if (!wasOpen) await connection.OpenAsync();
-
-            try
-            {
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = "dbo.sp_GetBillById";
-                    command.CommandType = CommandType.StoredProcedure;
-                    
-                    var pBusinessId = command.CreateParameter();
-                    pBusinessId.ParameterName = "@BusinessId";
-                    pBusinessId.Value = businessId;
-                    command.Parameters.Add(pBusinessId);
-
-                    var pId = command.CreateParameter();
-                    pId.ParameterName = "@Id";
-                    pId.Value = id;
-                    command.Parameters.Add(pId);
-
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        if (!await reader.ReadAsync()) return null;
-
-                        var bill = new Bill
-                        {
-                            Id = Convert.ToInt32(reader["Id"]),
-                            BusinessId = Convert.ToInt32(reader["BusinessId"]),
-                            BranchId = Convert.ToInt32(reader["BranchId"]),
-                            CustomerId = Convert.ToInt32(reader["CustomerId"]),
-                            CreatedByStaffId = reader["CreatedByStaffId"] == DBNull.Value ? null : (int?)Convert.ToInt32(reader["CreatedByStaffId"]),
-                            BillNumber = Convert.ToString(reader["BillNumber"]) ?? string.Empty,
-                            Subtotal = Convert.ToDecimal(reader["Subtotal"]),
-                            DiscountCode = reader["DiscountCode"] == DBNull.Value ? null : Convert.ToString(reader["DiscountCode"]),
-                            DiscountAmount = Convert.ToDecimal(reader["DiscountAmount"]),
-                            TaxAmount = Convert.ToDecimal(reader["TaxAmount"]),
-                            TotalAmount = Convert.ToDecimal(reader["TotalAmount"]),
-                            PaymentMethod = Convert.ToString(reader["PaymentMethod"]) ?? "Cash",
-                            Status = Convert.ToString(reader["Status"]) ?? "Pending",
-                            CreatedAt = Convert.ToDateTime(reader["CreatedAt"])
-                        };
-
-                        if (await reader.NextResultAsync())
-                        {
-                            var items = new List<BillItem>();
-                            while (await reader.ReadAsync())
-                            {
-                                items.Add(new BillItem
-                                {
-                                    Id = Convert.ToInt32(reader["Id"]),
-                                    BillId = Convert.ToInt32(reader["BillId"]),
-                                    ServiceId = Convert.ToInt32(reader["ServiceId"]),
-                                    ServiceName = Convert.ToString(reader["ServiceName"]) ?? string.Empty,
-                                    UnitPrice = Convert.ToDecimal(reader["UnitPrice"]),
-                                    Quantity = Convert.ToInt32(reader["Quantity"]),
-                                    LineTotal = Convert.ToDecimal(reader["LineTotal"])
-                                });
-                            }
-                            bill.Items = items;
-                        }
-
-                        return bill;
-                    }
-                }
-            }
-            finally
-            {
-                if (!wasOpen) await connection.CloseAsync();
-            }
+            return await _context.Bills
+                .Include(b => b.Items)
+                .Include(b => b.Customer)
+                .Include(b => b.Branch)
+                .Include(b => b.CreatedByStaff)
+                .FirstOrDefaultAsync(b => b.BusinessId == businessId && b.Id == id);
         }
 
-        public async Task<IEnumerable<Bill>> GetByBusinessIdAsync(int businessId)
+        public async Task<IEnumerable<Bill>> GetByBusinessIdAsync(
+            int businessId,
+            int? customerId = null,
+            int? staffId = null,
+            int? branchId = null,
+            DateTime? startDate = null,
+            DateTime? endDate = null,
+            string? status = null,
+            decimal? minAmount = null,
+            decimal? maxAmount = null)
         {
-            var connection = _context.Database.GetDbConnection();
-            var wasOpen = connection.State == ConnectionState.Open;
-            if (!wasOpen) await connection.OpenAsync();
+            var query = _context.Bills
+                .Include(b => b.Customer)
+                .Include(b => b.Branch)
+                .Include(b => b.CreatedByStaff)
+                .Where(b => b.BusinessId == businessId);
 
-            try
+            if (customerId.HasValue)
             {
-                using (var command = connection.CreateCommand())
-                {
-                    command.CommandText = "dbo.sp_GetBillsByBusinessId";
-                    command.CommandType = CommandType.StoredProcedure;
-                    
-                    var pBusinessId = command.CreateParameter();
-                    pBusinessId.ParameterName = "@BusinessId";
-                    pBusinessId.Value = businessId;
-                    command.Parameters.Add(pBusinessId);
+                query = query.Where(b => b.CustomerId == customerId.Value);
+            }
 
-                    var bills = new List<Bill>();
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            var bill = new Bill
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                BusinessId = Convert.ToInt32(reader["BusinessId"]),
-                                BranchId = Convert.ToInt32(reader["BranchId"]),
-                                CustomerId = Convert.ToInt32(reader["CustomerId"]),
-                                CreatedByStaffId = reader["CreatedByStaffId"] == DBNull.Value ? null : (int?)Convert.ToInt32(reader["CreatedByStaffId"]),
-                                BillNumber = Convert.ToString(reader["BillNumber"]) ?? string.Empty,
-                                Subtotal = Convert.ToDecimal(reader["Subtotal"]),
-                                DiscountCode = reader["DiscountCode"] == DBNull.Value ? null : Convert.ToString(reader["DiscountCode"]),
-                                DiscountAmount = Convert.ToDecimal(reader["DiscountAmount"]),
-                                TaxAmount = Convert.ToDecimal(reader["TaxAmount"]),
-                                TotalAmount = Convert.ToDecimal(reader["TotalAmount"]),
-                                PaymentMethod = Convert.ToString(reader["PaymentMethod"]) ?? "Cash",
-                                Status = Convert.ToString(reader["Status"]) ?? "Pending",
-                                CreatedAt = Convert.ToDateTime(reader["CreatedAt"])
-                            };
-                            bills.Add(bill);
-                        }
-                    }
-                    return bills;
-                }
-            }
-            finally
+            if (staffId.HasValue)
             {
-                if (!wasOpen) await connection.CloseAsync();
+                query = query.Where(b => b.CreatedByStaffId == staffId.Value);
             }
+
+            if (branchId.HasValue)
+            {
+                query = query.Where(b => b.BranchId == branchId.Value);
+            }
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(b => b.CreatedAt >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(b => b.CreatedAt <= endDate.Value);
+            }
+
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (minAmount.HasValue)
+            {
+                query = query.Where(b => b.TotalAmount >= minAmount.Value);
+            }
+
+            if (maxAmount.HasValue)
+            {
+                query = query.Where(b => b.TotalAmount <= maxAmount.Value);
+            }
+
+            return await query
+                .OrderByDescending(b => b.CreatedAt)
+                .ToListAsync();
         }
 
         public async Task<Bill> AddAsync(Bill bill, string itemsJson)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", bill.BusinessId);
-            var pBranchId = new SqlParameter("@BranchId", bill.BranchId);
-            var pCustomerId = new SqlParameter("@CustomerId", bill.CustomerId);
-            var pCreatedByStaffId = new SqlParameter("@CreatedByStaffId", bill.CreatedByStaffId ?? (object)System.DBNull.Value);
-            var pBillNumber = new SqlParameter("@BillNumber", bill.BillNumber);
-            var pSubtotal = new SqlParameter("@Subtotal", bill.Subtotal);
-            var pDiscountCode = new SqlParameter("@DiscountCode", bill.DiscountCode ?? (object)System.DBNull.Value);
-            var pDiscountAmount = new SqlParameter("@DiscountAmount", bill.DiscountAmount);
-            var pTaxAmount = new SqlParameter("@TaxAmount", bill.TaxAmount);
-            var pTotalAmount = new SqlParameter("@TotalAmount", bill.TotalAmount);
-            var pPaymentMethod = new SqlParameter("@PaymentMethod", bill.PaymentMethod);
-            var pStatus = new SqlParameter("@Status", bill.Status);
-            var pItemsJson = new SqlParameter("@ItemsJson", itemsJson);
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                try
+                {
+                    bill.CreatedAt = DateTime.UtcNow;
+                    
+                    var options = new System.Text.Json.JsonSerializerOptions 
+                    { 
+                        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase 
+                    };
+                    var items = System.Text.Json.JsonSerializer.Deserialize<List<BillItem>>(itemsJson, options) ?? new List<BillItem>();
+                    
+                    bill.Items = new List<BillItem>();
+                    foreach (var item in items)
+                    {
+                        item.Bill = bill;
+                        bill.Items.Add(item);
+                    }
 
-            var results = await _context.Bills
-                .FromSqlRaw("EXEC dbo.sp_CreateBill @BusinessId, @BranchId, @CustomerId, @CreatedByStaffId, @BillNumber, @Subtotal, @DiscountCode, @DiscountAmount, @TaxAmount, @TotalAmount, @PaymentMethod, @Status, @ItemsJson",
-                    pBusinessId, pBranchId, pCustomerId, pCreatedByStaffId, pBillNumber, pSubtotal, pDiscountCode, pDiscountAmount, pTaxAmount, pTotalAmount, pPaymentMethod, pStatus, pItemsJson)
-                .ToListAsync();
+                    await _context.Bills.AddAsync(bill);
+                    await _context.SaveChangesAsync();
 
-            return results.First();
+                    if (bill.CreatedByStaffId.HasValue)
+                    {
+                        var staff = await _context.StaffMembers.FirstOrDefaultAsync(s => s.Id == bill.CreatedByStaffId.Value && s.BusinessId == bill.BusinessId);
+                        if (staff != null)
+                        {
+                            staff.TotalBills += 1;
+                            staff.RevenueGenerated += bill.TotalAmount;
+                            staff.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return bill;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            }
         }
 
         public async Task<bool> DeleteAsync(int businessId, int id)
         {
-            var pBusinessId = new SqlParameter("@BusinessId", businessId);
-            var pId = new SqlParameter("@Id", id);
-            var result = await _context.Database.ExecuteSqlRawAsync(
-                "EXEC dbo.sp_DeleteBill @BusinessId, @Id", pBusinessId, pId);
-            return result > 0;
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                try
+                {
+                    var bill = await _context.Bills
+                        .Include(b => b.Items)
+                        .FirstOrDefaultAsync(b => b.BusinessId == businessId && b.Id == id);
+                        
+                    if (bill == null)
+                    {
+                        return false;
+                    }
+
+                    var staffId = bill.CreatedByStaffId;
+                    var totalAmount = bill.TotalAmount;
+
+                    _context.BillItems.RemoveRange(bill.Items);
+                    _context.Bills.Remove(bill);
+                    await _context.SaveChangesAsync();
+
+                    if (staffId.HasValue)
+                    {
+                        var staff = await _context.StaffMembers.FirstOrDefaultAsync(s => s.Id == staffId.Value && s.BusinessId == businessId);
+                        if (staff != null)
+                        {
+                            staff.TotalBills = Math.Max(0, staff.TotalBills - 1);
+                            staff.RevenueGenerated = Math.Max(0, staff.RevenueGenerated - totalAmount);
+                            staff.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return true;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            }
         }
     }
 }

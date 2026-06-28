@@ -23,9 +23,19 @@ namespace BillingBackend.Services
             return bill == null ? null : MapToDto(bill);
         }
 
-        public async Task<IEnumerable<BillDto>> GetByBusinessIdAsync(int businessId)
+        public async Task<IEnumerable<BillDto>> GetByBusinessIdAsync(
+            int businessId,
+            int? customerId = null,
+            int? staffId = null,
+            int? branchId = null,
+            DateTime? startDate = null,
+            DateTime? endDate = null,
+            string? status = null,
+            decimal? minAmount = null,
+            decimal? maxAmount = null)
         {
-            var bills = await _billRepository.GetByBusinessIdAsync(businessId);
+            var bills = await _billRepository.GetByBusinessIdAsync(
+                businessId, customerId, staffId, branchId, startDate, endDate, status, minAmount, maxAmount);
             return bills.Select(b => MapToDto(b));
         }
 
@@ -81,6 +91,11 @@ namespace BillingBackend.Services
                 PaymentMethod = b.PaymentMethod,
                 Status = b.Status,
                 CreatedAt = b.CreatedAt,
+                CustomerName = b.Customer?.Name,
+                CustomerPhone = b.Customer?.Phone,
+                CustomerEmail = b.Customer?.Email,
+                StaffName = b.CreatedByStaff?.Name,
+                BranchName = b.Branch?.Name,
                 Items = b.Items.Select(bi => new BillItemDto
                 {
                     Id = bi.Id,

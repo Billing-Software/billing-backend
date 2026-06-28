@@ -3,6 +3,7 @@ using BillingBackend.Repositories;
 using BillingBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Oracle.EntityFrameworkCore.Infrastructure;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System;
@@ -16,7 +17,8 @@ namespace BillingBackend.Extensions
         public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration config)
         {
             services.AddDbContext<BillingDbContext>(options =>
-                options.UseSqlServer(config.GetConnectionString("DefaultConnection")));
+                options.UseOracle(config.GetConnectionString("DefaultConnection"),
+                    b => b.UseOracleSQLCompatibility(OracleSQLCompatibility.DatabaseVersion19)));
             return services;
         }
 
@@ -61,6 +63,9 @@ namespace BillingBackend.Extensions
             services.AddScoped<IBillRepository, BillRepository>();
             services.AddScoped<IDashboardRepository, DashboardRepository>();
             services.AddScoped<ISettingsRepository, SettingsRepository>();
+            services.AddScoped<IExpenseRepository, ExpenseRepository>();
+            services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+            services.AddScoped<ICategoryRepository, CategoryRepository>();
 
             // Services
             services.AddScoped<ITokenService, TokenService>();
@@ -74,6 +79,10 @@ namespace BillingBackend.Extensions
             services.AddScoped<IBillService, BillService>();
             services.AddScoped<IDashboardService, DashboardService>();
             services.AddScoped<ISettingsService, SettingsService>();
+            services.AddScoped<IExpenseService, ExpenseService>();
+            services.AddScoped<IPurchaseService, PurchaseService>();
+            services.AddScoped<ICategoryService, CategoryService>();
+            services.AddScoped<IEmailService, EmailService>();
 
             return services;
         }

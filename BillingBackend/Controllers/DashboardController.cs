@@ -17,8 +17,16 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<DashboardDataDto>> GetDashboardData()
         {
-            var data = await _dashboardService.GetDashboardDataAsync(CurrentBusinessId);
-            return Ok(data);
+            if (CurrentUserRole != "Owner")
+            {
+                var data = await _dashboardService.GetStaffDashboardDataAsync(CurrentBusinessId, CurrentUserId);
+                return Ok(data);
+            }
+            else
+            {
+                var data = await _dashboardService.GetDashboardDataAsync(CurrentBusinessId);
+                return Ok(data);
+            }
         }
     }
 }
