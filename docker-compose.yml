@@ -1,0 +1,9 @@
+services:
+  api:
+    image: billing-backend:1.0
+    container_name: billing-backend
+    restart: unless-stopped
+    ports:
+      - "5000:8080"
+    environment:
+      - ConnectionStrings__DefaultConnection=User Id=billcom_user;Password=U_48sFFH_q6p;Data Source=bmc4e2rk3r80p8b7_high;Tns_Admin=/app/wallet;

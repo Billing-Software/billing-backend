@@ -1,3 +1,9 @@
+bin/
+obj/
+.git/
+.vs/
+.vscode/
+*.zip
 **/.classpath
 **/.dockerignore
 **/.env

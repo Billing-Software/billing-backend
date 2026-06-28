@@ -110,3 +110,8 @@ publish/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Oracle Wallet directories & archives
+BillingBackend/wallet/
+*.zip
+
