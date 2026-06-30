@@ -29,7 +29,8 @@ namespace BillingBackend.Services
             {
                 BusinessId = businessId,
                 Name = dto.Name,
-                Type = dto.Type
+                Type = dto.Type,
+                ParentId = dto.ParentId
             };
 
             var added = await _categoryRepository.AddAsync(category);
@@ -49,6 +50,7 @@ namespace BillingBackend.Services
                 BusinessId = c.BusinessId,
                 Name = c.Name,
                 Type = c.Type,
+                ParentId = c.ParentId,
                 CreatedAt = c.CreatedAt
             };
         }

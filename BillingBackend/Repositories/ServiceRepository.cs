@@ -54,7 +54,7 @@ namespace BillingBackend.Repositories
             existing.BasePrice = service.BasePrice;
             existing.TaxRate = service.TaxRate;
             existing.Status = service.Status;
-            existing.IconName = service.IconName;
+            existing.ImageUrl = service.ImageUrl;
             existing.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();

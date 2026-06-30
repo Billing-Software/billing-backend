@@ -45,7 +45,7 @@ namespace BillingBackend.Services
                 BasePrice = dto.BasePrice,
                 TaxRate = dto.TaxRate,
                 Status = dto.Status,
-                IconName = dto.IconName
+                ImageUrl = dto.ImageUrl
             };
 
             var added = await _serviceRepository.AddAsync(service);
@@ -69,7 +69,7 @@ namespace BillingBackend.Services
                 BasePrice = dto.BasePrice,
                 TaxRate = dto.TaxRate,
                 Status = dto.Status,
-                IconName = dto.IconName
+                ImageUrl = dto.ImageUrl
             };
 
             var updated = await _serviceRepository.UpdateAsync(service);
@@ -93,7 +93,7 @@ namespace BillingBackend.Services
                 BasePrice = s.BasePrice,
                 TaxRate = s.TaxRate,
                 Status = s.Status,
-                IconName = s.IconName
+                ImageUrl = s.ImageUrl
             };
         }
     }

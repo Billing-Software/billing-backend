@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Oracle.EntityFrameworkCore.Infrastructure;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -50,7 +52,7 @@ namespace BillingBackend.Extensions
             return services;
         }
 
-        public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+        public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration config)
         {
             // Repositories
             services.AddScoped<IUserRepository, UserRepository>();
@@ -83,6 +85,18 @@ namespace BillingBackend.Extensions
             services.AddScoped<IPurchaseService, PurchaseService>();
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<IEmailService, EmailService>();
+
+            // Storage Service configuration
+            services.AddHttpContextAccessor();
+            var accountId = config["CloudflareR2:AccountId"];
+            if (!string.IsNullOrEmpty(accountId))
+            {
+                services.AddSingleton<IStorageService, CloudflareR2StorageService>();
+            }
+            else
+            {
+                services.AddScoped<IStorageService, LocalStorageService>();
+            }
 
             return services;
         }

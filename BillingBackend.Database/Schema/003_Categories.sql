@@ -9,9 +9,11 @@ BEGIN
         [BusinessId]    INT             NOT NULL,
         [Name]          NVARCHAR(100)   NOT NULL,
         [Type]          NVARCHAR(50)    NOT NULL, -- 'Service', 'Inventory', 'Expense'
+        [ParentId]      INT             NULL,
         [CreatedAt]     DATETIME2       NOT NULL DEFAULT GETUTCDATE(),
         CONSTRAINT [PK_Categories] PRIMARY KEY CLUSTERED ([Id] ASC),
-        CONSTRAINT [FK_Categories_Businesses] FOREIGN KEY ([BusinessId]) REFERENCES [dbo].[Businesses] ([Id]) ON DELETE CASCADE
+        CONSTRAINT [FK_Categories_Businesses] FOREIGN KEY ([BusinessId]) REFERENCES [dbo].[Businesses] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_Categories_Parent] FOREIGN KEY ([ParentId]) REFERENCES [dbo].[Categories] ([Id]) ON DELETE NO ACTION
     );
 END
 GO

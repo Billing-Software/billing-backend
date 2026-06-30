@@ -15,16 +15,16 @@ CREATE PROCEDURE dbo.sp_CreateService
     @BasePrice DECIMAL(18,2),
     @TaxRate DECIMAL(5,2),
     @Status NVARCHAR(20),
-    @IconName NVARCHAR(500) = NULL
+    @ImageUrl NVARCHAR(500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     
     INSERT INTO [dbo].[Services] (
-        [BusinessId], [Name], [SKU], [Category], [BasePrice], [TaxRate], [Status], [IconName], [CreatedAt]
+        [BusinessId], [Name], [SKU], [Category], [BasePrice], [TaxRate], [Status], [ImageUrl], [CreatedAt]
     )
     VALUES (
-        @BusinessId, @Name, @SKU, @Category, @BasePrice, @TaxRate, ISNULL(@Status, 'Active'), @IconName, GETUTCDATE()
+        @BusinessId, @Name, @SKU, @Category, @BasePrice, @TaxRate, ISNULL(@Status, 'Active'), @ImageUrl, GETUTCDATE()
     );
     
     SELECT * FROM [dbo].[Services] WHERE [Id] = SCOPE_IDENTITY();
@@ -79,7 +79,7 @@ CREATE PROCEDURE dbo.sp_UpdateService
     @BasePrice DECIMAL(18,2),
     @TaxRate DECIMAL(5,2),
     @Status NVARCHAR(20),
-    @IconName NVARCHAR(500) = NULL
+    @ImageUrl NVARCHAR(500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -91,7 +91,7 @@ BEGIN
         [BasePrice] = @BasePrice,
         [TaxRate] = @TaxRate,
         [Status] = @Status,
-        [IconName] = @IconName,
+        [ImageUrl] = @ImageUrl,
         [UpdatedAt] = GETUTCDATE()
     WHERE [Id] = @Id AND [BusinessId] = @BusinessId;
     

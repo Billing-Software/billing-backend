@@ -10,16 +10,17 @@ GO
 CREATE PROCEDURE dbo.sp_CreateCategory
     @BusinessId INT,
     @Name NVARCHAR(100),
-    @Type NVARCHAR(50)
+    @Type NVARCHAR(50),
+    @ParentId INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     
     INSERT INTO [dbo].[Categories] (
-        [BusinessId], [Name], [Type], [CreatedAt]
+        [BusinessId], [Name], [Type], [ParentId], [CreatedAt]
     )
     VALUES (
-        @BusinessId, @Name, @Type, GETUTCDATE()
+        @BusinessId, @Name, @Type, @ParentId, GETUTCDATE()
     );
     
     SELECT * FROM [dbo].[Categories] WHERE [Id] = SCOPE_IDENTITY();

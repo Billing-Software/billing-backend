@@ -37,9 +37,24 @@ namespace BillingBackend.Repositories
                 return false;
             }
 
-            _context.Categories.Remove(existing);
+            // Find all descendants recursively
+            var allCategories = await _context.Categories.Where(c => c.BusinessId == businessId).ToListAsync();
+            var toDelete = new List<Category> { existing };
+            GetDescendants(existing.Id, allCategories, toDelete);
+
+            _context.Categories.RemoveRange(toDelete);
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        private void GetDescendants(int parentId, List<Category> allCategories, List<Category> result)
+        {
+            var children = allCategories.Where(c => c.ParentId == parentId).ToList();
+            foreach (var child in children)
+            {
+                result.Add(child);
+                GetDescendants(child.Id, allCategories, result);
+            }
         }
     }
 }

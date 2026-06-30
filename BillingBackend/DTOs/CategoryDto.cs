@@ -16,6 +16,8 @@ namespace BillingBackend.DTOs
         [StringLength(50)]
         public string Type { get; set; } = string.Empty; // 'Service', 'Inventory', 'Expense'
 
+        public int? ParentId { get; set; }
+
         public DateTime CreatedAt { get; set; }
     }
 }

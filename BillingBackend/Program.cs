@@ -11,7 +11,7 @@ builder.Services.AddControllers();
 builder.Services.AddDatabase(builder.Configuration);
 builder.Services.AddIdentityServices(builder.Configuration);
 builder.Services.AddCorsPolicy();
-builder.Services.AddApplicationServices();
+builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -34,6 +34,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("CorsPolicy");
 
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -47,23 +49,6 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<BillingDbContext>();
         context.Database.EnsureCreated();
-        // We commented out the DROP TABLE loop to prevent data loss.
-
-        //var tablesToDrop = new[] 
-        //{
-        //    "PurchaseItems", "Purchases", "Expenses", "WhatsAppTemplates", "WhatsAppSettings",
-        //    "BillItems", "Bills", "StaffMembers", "InventoryItems", "Services",
-        //    "Customers", "Branches", "Businesses", "Categories", "Users"
-        //};
-        //foreach (var table in tablesToDrop)
-        //{
-        //    try
-        //    {
-        //        context.Database.ExecuteSqlRaw($"DROP TABLE \"{table}\" CASCADE CONSTRAINTS");
-        //    }
-        //    catch { /* Ignore if table doesn't exist */}
-        //}
-        
         try
         {
             context.Database.ExecuteSqlRaw("ALTER TABLE \"StaffMembers\" DROP CONSTRAINT \"FK_Staff_Branches_BranchId\"");
@@ -85,6 +70,24 @@ using (var scope = app.Services.CreateScope())
         try
         {
             context.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD \"PasswordResetTokenExpiry\" TIMESTAMP NULL");
+        }
+        catch { }
+
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"Categories\" ADD \"ParentId\" NUMBER(10) NULL");
+        }
+        catch { }
+
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"Services\" ADD \"ImageUrl\" VARCHAR2(500) NULL");
+        }
+        catch { }
+
+        try
+        {
+            context.Database.ExecuteSqlRaw("ALTER TABLE \"InventoryItems\" ADD \"ImageUrl\" VARCHAR2(500) NULL");
         }
         catch { }
     }
