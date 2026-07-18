@@ -53,6 +53,24 @@ namespace BillingBackend.Controllers
             }
         }
 
+        [HttpPost("refresh")]
+        public async Task<ActionResult<AuthResponseDto>> Refresh(TokenRefreshDto refreshDto)
+        {
+            try
+            {
+                var result = await _authService.RefreshTokenAsync(refreshDto);
+                if (result == null)
+                {
+                    return Unauthorized("Invalid or expired refresh token.");
+                }
+                return Ok(result);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpGet("check-username")]
         public async Task<ActionResult<bool>> CheckUsername([FromQuery] string username)
         {

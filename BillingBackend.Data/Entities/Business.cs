@@ -65,6 +65,7 @@ namespace BillingBackend.Data.Entities
 
         [MaxLength(50)]
         public string ReceiptTemplateType { get; set; } = "Thermal80mm";
+        public bool IsSuspended { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
 
@@ -78,6 +79,6 @@ namespace BillingBackend.Data.Entities
         public ICollection<InventoryItem> InventoryItems { get; set; } = new List<InventoryItem>();
         public ICollection<StaffMember> StaffMembers { get; set; } = new List<StaffMember>();
         public ICollection<Bill> Bills { get; set; } = new List<Bill>();
-        public WhatsAppSettings? WhatsAppSettings { get; set; }
+        public WhatsAppAccount? WhatsAppAccount { get; set; }
     }
 }

@@ -8,6 +8,7 @@ namespace BillingBackend.Services
     {
         Task<IEnumerable<CategoryDto>> GetByBusinessIdAsync(int businessId);
         Task<CategoryDto> AddAsync(int businessId, CategoryDto dto);
+        Task<CategoryDto?> UpdateAsync(int businessId, int id, CategoryDto dto);
         Task<bool> DeleteAsync(int businessId, int id);
     }
 }

@@ -47,6 +47,28 @@ namespace BillingBackend.Repositories
             return true;
         }
 
+        public async Task<Category?> GetByIdAsync(int businessId, int id)
+        {
+            return await _context.Categories.FirstOrDefaultAsync(c => c.BusinessId == businessId && c.Id == id);
+        }
+
+        public async Task<Category?> UpdateAsync(Category category)
+        {
+            var existing = await _context.Categories.FirstOrDefaultAsync(c => c.BusinessId == category.BusinessId && c.Id == category.Id);
+            if (existing == null)
+            {
+                return null;
+            }
+
+            existing.Name = category.Name;
+            existing.Type = category.Type;
+            existing.ParentId = category.ParentId;
+
+            _context.Categories.Update(existing);
+            await _context.SaveChangesAsync();
+            return existing;
+        }
+
         private void GetDescendants(int parentId, List<Category> allCategories, List<Category> result)
         {
             var children = allCategories.Where(c => c.ParentId == parentId).ToList();

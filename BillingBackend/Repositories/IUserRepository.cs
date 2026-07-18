@@ -11,6 +11,9 @@ namespace BillingBackend.Repositories
         Task<User?> GetByEmailAsync(string email);
         Task AddAsync(User user);
         Task<UserRegisterResultDto?> RegisterUserAndBusinessAsync(RegisterDto registerDto, byte[] passwordHash, byte[] passwordSalt);
+        Task AddRefreshTokenAsync(UserRefreshToken token);
+        Task<UserRefreshToken?> GetRefreshTokenAsync(string token);
+        Task RemoveRefreshTokenAsync(UserRefreshToken token);
         Task SaveChangesAsync();
     }
 }

@@ -41,61 +41,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Automatically create the database if it doesn't exist on startup
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var context = services.GetRequiredService<BillingDbContext>();
-        context.Database.EnsureCreated();
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"StaffMembers\" DROP CONSTRAINT \"FK_Staff_Branches_BranchId\"");
-        }
-        catch { }
-
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"StaffMembers\" DROP COLUMN \"BranchId\"");
-        }
-        catch { }
-
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD \"PasswordResetToken\" VARCHAR2(100) NULL");
-        }
-        catch { }
-
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD \"PasswordResetTokenExpiry\" TIMESTAMP NULL");
-        }
-        catch { }
-
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"Categories\" ADD \"ParentId\" NUMBER(10) NULL");
-        }
-        catch { }
-
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"Services\" ADD \"ImageUrl\" VARCHAR2(500) NULL");
-        }
-        catch { }
-
-        try
-        {
-            context.Database.ExecuteSqlRaw("ALTER TABLE \"InventoryItems\" ADD \"ImageUrl\" VARCHAR2(500) NULL");
-        }
-        catch { }
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred creating the database.");
-    }
-}
+// Database updates are managed by the BillingBackend.Migrator project.
+// Run BillingBackend.Migrator to apply schema changes and table alters.
 
 app.Run();

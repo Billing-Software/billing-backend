@@ -86,6 +86,13 @@ namespace BillingBackend.Extensions
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<IEmailService, EmailService>();
 
+            // WhatsApp Integration Module
+            services.AddScoped<IWhatsAppRepository, WhatsAppRepository>();
+            services.AddScoped<IWhatsAppService, WhatsAppService>();
+            services.AddScoped<IWebhookService, WebhookService>();
+            services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
+            services.AddHttpClient<IMetaApiClient, MetaApiClient>();
+
             // Storage Service configuration
             services.AddHttpContextAccessor();
             var accountId = config["CloudflareR2:AccountId"];

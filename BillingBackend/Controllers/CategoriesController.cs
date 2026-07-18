@@ -29,6 +29,24 @@ namespace BillingBackend.Controllers
             return Ok(created);
         }
 
+        [HttpPut("{id}")]
+        public async Task<ActionResult<CategoryDto>> Update(int id, CategoryDto dto)
+        {
+            try
+            {
+                var updated = await _categoryService.UpdateAsync(CurrentBusinessId, id, dto);
+                if (updated == null)
+                {
+                    return NotFound();
+                }
+                return Ok(updated);
+            }
+            catch (System.InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {

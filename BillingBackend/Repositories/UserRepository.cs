@@ -3,7 +3,9 @@ using BillingBackend.Data.Entities;
 using BillingBackend.DTOs;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
+
 
 namespace BillingBackend.Repositories
 {
@@ -101,14 +103,13 @@ namespace BillingBackend.Repositories
                     };
                     await _context.Customers.AddAsync(customer);
 
-                    // 5. Insert WhatsApp Settings
-                    var waSettings = new WhatsAppSettings
+                    // 5. Insert WhatsApp Account (pending connection)
+                    var waAccount = new WhatsAppAccount
                     {
                         BusinessId = business.Id,
-                        ApiKey = null,
-                        IsConnected = false
+                        Status = "Pending"
                     };
-                    await _context.WhatsAppSettings.AddAsync(waSettings);
+                    await _context.WhatsAppAccounts.AddAsync(waAccount);
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -136,6 +137,33 @@ namespace BillingBackend.Repositories
                     throw;
                 }
             }
+        }
+
+        public async Task AddRefreshTokenAsync(UserRefreshToken token)
+        {
+            // Clean up any expired refresh tokens for the user to prevent DB bloat
+            var expired = await _context.UserRefreshTokens
+                .Where(rt => rt.UserId == token.UserId && rt.ExpiryTime < DateTime.UtcNow)
+                .ToListAsync();
+            if (expired.Any())
+            {
+                _context.UserRefreshTokens.RemoveRange(expired);
+            }
+
+            await _context.UserRefreshTokens.AddAsync(token);
+        }
+
+        public async Task<UserRefreshToken?> GetRefreshTokenAsync(string token)
+        {
+            return await _context.UserRefreshTokens
+                .Include(rt => rt.User)
+                .FirstOrDefaultAsync(rt => rt.Token == token);
+        }
+
+        public async Task RemoveRefreshTokenAsync(UserRefreshToken token)
+        {
+            _context.UserRefreshTokens.Remove(token);
+            await Task.CompletedTask;
         }
 
         public async Task SaveChangesAsync()

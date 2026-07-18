@@ -19,12 +19,14 @@ namespace BillingBackend.Data
         public DbSet<StaffMember> StaffMembers { get; set; }
         public DbSet<Bill> Bills { get; set; }
         public DbSet<BillItem> BillItems { get; set; }
-        public DbSet<WhatsAppSettings> WhatsAppSettings { get; set; }
-        public DbSet<WhatsAppTemplate> WhatsAppTemplates { get; set; }
+        public DbSet<WhatsAppAccount> WhatsAppAccounts { get; set; }
+        public DbSet<MessageLog> MessageLogs { get; set; }
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<Purchase> Purchases { get; set; }
         public DbSet<PurchaseItem> PurchaseItems { get; set; }
         public DbSet<Category> Categories { get; set; }
+        public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -152,24 +154,32 @@ namespace BillingBackend.Data
                     .OnDelete(DeleteBehavior.NoAction);
             });
 
-            // ===== WhatsAppSettings =====
-            modelBuilder.Entity<WhatsAppSettings>(entity =>
+            // ===== WhatsAppAccounts =====
+            modelBuilder.Entity<WhatsAppAccount>(entity =>
             {
                 entity.HasOne(w => w.Business)
-                    .WithOne(b => b.WhatsAppSettings)
-                    .HasForeignKey<WhatsAppSettings>(w => w.BusinessId)
+                    .WithOne(b => b.WhatsAppAccount)
+                    .HasForeignKey<WhatsAppAccount>(w => w.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(w => w.BusinessId).IsUnique();
             });
 
-            // ===== WhatsAppTemplates =====
-            modelBuilder.Entity<WhatsAppTemplate>(entity =>
+            // ===== MessageLogs =====
+            modelBuilder.Entity<MessageLog>(entity =>
             {
-                entity.HasOne(t => t.WhatsAppSettings)
-                    .WithMany(w => w.Templates)
-                    .HasForeignKey(t => t.WhatsAppSettingsId)
+                entity.HasOne(m => m.WhatsAppAccount)
+                    .WithMany(w => w.MessageLogs)
+                    .HasForeignKey(m => m.WhatsAppAccountId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(m => m.Bill)
+                    .WithMany()
+                    .HasForeignKey(m => m.BillId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                // Index for fast webhook lookups by Meta message ID
+                entity.HasIndex(m => m.MetaMessageId);
             });
             // ===== Expenses =====
             modelBuilder.Entity<Expense>(entity =>
@@ -196,6 +206,17 @@ namespace BillingBackend.Data
                     .WithMany(p => p.Items)
                     .HasForeignKey(pi => pi.PurchaseId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ===== UserRefreshTokens =====
+            modelBuilder.Entity<UserRefreshToken>(entity =>
+            {
+                entity.HasOne(rt => rt.User)
+                    .WithMany()
+                    .HasForeignKey(rt => rt.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(rt => rt.Token).IsUnique();
             });
         }
     }

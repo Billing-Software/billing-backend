@@ -50,6 +50,9 @@ namespace BillingBackend.Data.Entities
         [MaxLength(20)]
         public string Status { get; set; } = "Pending";
 
+        [MaxLength(500)]
+        public string? InvoicePdfUrl { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation

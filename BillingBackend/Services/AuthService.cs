@@ -58,10 +58,23 @@ namespace BillingBackend.Services
             };
 
             var token = _tokenService.CreateToken(dummyUser, result.BusinessId);
+            var refreshToken = _tokenService.GenerateRefreshToken();
+
+            var dbRefreshToken = new UserRefreshToken
+            {
+                UserId = dummyUser.Id,
+                Token = refreshToken,
+                ExpiryTime = DateTime.UtcNow.AddDays(30),
+                IsRevoked = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _userRepository.AddRefreshTokenAsync(dbRefreshToken);
+            await _userRepository.SaveChangesAsync();
 
             return new AuthResponseDto
             {
                 Token = token,
+                RefreshToken = refreshToken,
                 Username = result.Username,
                 Email = result.Email,
                 Role = result.Role,
@@ -125,17 +138,46 @@ namespace BillingBackend.Services
                     businessId = business?.Id ?? 0;
                     businessName = business?.LegalName ?? string.Empty;
                 }
+                else if (user.Role == "SuperAdmin")
+                {
+                    var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
+                    businessId = business?.Id ?? 0;
+                    businessName = business?.LegalName ?? "System Administration";
+                }
                 else
                 {
                     throw new InvalidOperationException("Business ID is required for staff login.");
                 }
             }
 
+            // Check if client business is suspended (bypassed for SuperAdmin)
+            if (user.Role != "SuperAdmin" && businessId > 0)
+            {
+                var business = await _businessRepository.GetByIdAsync(businessId);
+                if (business != null && business.IsSuspended)
+                {
+                    throw new InvalidOperationException("Your business account has been suspended. Please contact platform support.");
+                }
+            }
+
             var token = _tokenService.CreateToken(user, businessId, staffId);
+            var refreshToken = _tokenService.GenerateRefreshToken();
+
+            var dbRefreshToken = new UserRefreshToken
+            {
+                UserId = user.Id,
+                Token = refreshToken,
+                ExpiryTime = DateTime.UtcNow.AddDays(30),
+                IsRevoked = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _userRepository.AddRefreshTokenAsync(dbRefreshToken);
+            await _userRepository.SaveChangesAsync();
 
             return new AuthResponseDto
             {
                 Token = token,
+                RefreshToken = refreshToken,
                 Username = user.Username,
                 Email = user.Email,
                 Role = user.Role,
@@ -244,6 +286,98 @@ namespace BillingBackend.Services
 
             await _userRepository.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<AuthResponseDto?> RefreshTokenAsync(TokenRefreshDto refreshDto)
+        {
+            var dbRefreshToken = await _userRepository.GetRefreshTokenAsync(refreshDto.RefreshToken);
+            if (dbRefreshToken == null || dbRefreshToken.IsRevoked || dbRefreshToken.ExpiryTime < DateTime.UtcNow)
+            {
+                return null;
+            }
+
+            var user = dbRefreshToken.User;
+            if (user == null)
+            {
+                return null;
+            }
+
+            // Fetch the business details for this owner or staff member
+            int businessId = 0;
+            string businessName = string.Empty;
+            int? staffId = null;
+
+            if (user.Role == "Owner")
+            {
+                var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
+                businessId = business?.Id ?? 0;
+                businessName = business?.LegalName ?? string.Empty;
+            }
+            else if (user.Role == "SuperAdmin")
+            {
+                var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
+                businessId = business?.Id ?? 0;
+                businessName = business?.LegalName ?? "System Administration";
+            }
+            else
+            {
+                var staff = await _staffRepository.GetByUserIdAsync(user.Id);
+                if (staff == null)
+                {
+                    return null;
+                }
+                
+                if (staff.Status == "Inactive")
+                {
+                    throw new InvalidOperationException("Access denied: Staff account is suspended.");
+                }
+
+                businessId = staff.BusinessId;
+                staffId = staff.Id;
+                var business = await _businessRepository.GetByIdAsync(businessId);
+                businessName = business?.LegalName ?? string.Empty;
+            }
+
+            // Check if client business is suspended (bypassed for SuperAdmin)
+            if (user.Role != "SuperAdmin" && businessId > 0)
+            {
+                var business = await _businessRepository.GetByIdAsync(businessId);
+                if (business != null && business.IsSuspended)
+                {
+                    throw new InvalidOperationException("Your business account has been suspended. Please contact platform support.");
+                }
+            }
+
+            // Generate new access token
+            var token = _tokenService.CreateToken(user, businessId, staffId);
+
+            // Rotate refresh token: delete the old one
+            await _userRepository.RemoveRefreshTokenAsync(dbRefreshToken);
+
+            // Generate new refresh token
+            var newRefreshTokenString = _tokenService.GenerateRefreshToken();
+            var newDbRefreshToken = new UserRefreshToken
+            {
+                UserId = user.Id,
+                Token = newRefreshTokenString,
+                ExpiryTime = DateTime.UtcNow.AddDays(30),
+                IsRevoked = false,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _userRepository.AddRefreshTokenAsync(newDbRefreshToken);
+            await _userRepository.SaveChangesAsync();
+
+            return new AuthResponseDto
+            {
+                Token = token,
+                RefreshToken = newRefreshTokenString,
+                Username = user.Username,
+                Email = user.Email,
+                Role = user.Role,
+                BusinessId = user.Role == "SuperAdmin" ? businessId : businessId + 1000,
+                BusinessName = businessName,
+                StaffId = staffId
+            };
         }
     }
 }
