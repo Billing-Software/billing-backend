@@ -202,6 +202,7 @@ namespace BillingBackend.Migrator
                     try { ExecuteAlter(context, @"ALTER TABLE ""StaffMembers"" ADD ""BranchId"" NUMBER(10) NULL"); } catch(Exception){}
                     try { ExecuteAlter(context, @"ALTER TABLE ""StaffMembers"" ADD CONSTRAINT FK_StaffMembers_Branches FOREIGN KEY (""BranchId"") REFERENCES ""Branches""(""Id"") ON DELETE SET NULL"); } catch(Exception){}
                     try { ExecuteAlter(context, @"CREATE INDEX ""IX_StaffMembers_BranchId"" ON ""StaffMembers""(""BranchId"")"); } catch(Exception){}
+                    try { ExecuteAlter(context, @"ALTER TABLE ""PaymentTransactions"" ADD ""WebhookEventId"" NUMBER(10) NULL"); } catch(Exception){}
 
                     // Seeding SuperAdmin User dynamically
                     var hasAdmin = context.Users.Any(u => u.Role == "SuperAdmin");
