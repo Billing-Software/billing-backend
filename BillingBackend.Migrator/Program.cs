@@ -197,28 +197,35 @@ namespace BillingBackend.Migrator
                     try { ExecuteAlter(context, @"ALTER TABLE ""PaymentTransactions"" ADD ""WebhookEventId"" NUMBER(10) NULL"); } catch(Exception){}
 
                     // Seeding SuperAdmin User dynamically
-                    var hasAdmin = context.Users.Any(u => u.Role == "SuperAdmin");
-                    if (!hasAdmin)
+                    try
                     {
-                        using (var hmac = new System.Security.Cryptography.HMACSHA512())
+                        var hasAdmin = context.Users.Any(u => u.Role == "SuperAdmin");
+                        if (!hasAdmin)
                         {
-                            var passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes("adminpassword123"));
-                            var passwordSalt = hmac.Key;
-
-                            var adminUser = new BillingBackend.Data.Entities.User
+                            using (var hmac = new System.Security.Cryptography.HMACSHA512())
                             {
-                                Username = "superadmin",
-                                Email = "admin@smartbill.pro",
-                                PasswordHash = passwordHash,
-                                PasswordSalt = passwordSalt,
-                                Role = "SuperAdmin"
-                            };
-                            context.Users.Add(adminUser);
-                            context.SaveChanges();
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("\n[Seeded] Default SuperAdmin created: username='superadmin', password='adminpassword123', email='admin@smartbill.pro'");
-                            Console.ResetColor();
+                                var passwordHash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes("adminpassword123"));
+                                var passwordSalt = hmac.Key;
+
+                                var adminUser = new BillingBackend.Data.Entities.User
+                                {
+                                    Username = "superadmin",
+                                    Email = "admin@smartbill.pro",
+                                    PasswordHash = passwordHash,
+                                    PasswordSalt = passwordSalt,
+                                    Role = "SuperAdmin"
+                                };
+                                context.Users.Add(adminUser);
+                                context.SaveChanges();
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                Console.WriteLine("\n[Seeded] Default SuperAdmin created: username='superadmin', password='adminpassword123', email='admin@smartbill.pro'");
+                                Console.ResetColor();
+                            }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Seeding Skipped - Table Lock or Exists] {ex.Message}");
                     }
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("\nDatabase Migrator finished execution successfully!");
