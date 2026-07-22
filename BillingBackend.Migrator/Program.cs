@@ -35,7 +35,6 @@ namespace BillingBackend.Migrator
 
             Console.WriteLine($"Using Connection String: {connectionString}");
 
-            // 2. Configure DB Context
             var optionsBuilder = new DbContextOptionsBuilder<BillingDbContext>();
             optionsBuilder.UseOracle(connectionString, b => 
                 b.UseOracleSQLCompatibility(OracleSQLCompatibility.DatabaseVersion19));
@@ -44,19 +43,7 @@ namespace BillingBackend.Migrator
             {
                 try
                 {
-                    // Attempt to create database/tables, but ignore failures due to pre-existing tables
-                    try
-                    {
-                        Console.WriteLine("\n[1/2] Checking database and creating missing tables...");
-                        context.Database.EnsureCreated();
-                        Console.WriteLine("Database and tables checked successfully.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[Warning] EnsureCreated skipped table generation because some tables already exist: {ex.Message}");
-                    }
-
-                    Console.WriteLine("\n[2/2] Applying latest schema alters (columns, constraints, and new tables)...");
+                    Console.WriteLine("\n[1/2] Applying latest schema alters (columns, constraints, and new tables)...");
 
                     // Explicitly create the new WhatsApp integration tables if they don't exist
                     ExecuteAlter(context, @"
