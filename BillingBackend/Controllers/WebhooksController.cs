@@ -40,16 +40,24 @@ namespace BillingBackend.Controllers
             [FromQuery(Name = "hub.challenge")] string? challenge,
             [FromQuery(Name = "hub.verify_token")] string? verifyToken)
         {
-            _logger.LogInformation("Webhook verification request: mode={Mode}, token={Token}", mode, verifyToken);
-
-            if (mode == "subscribe" && verifyToken == _verifyToken)
+            try
             {
-                _logger.LogInformation("Webhook verified successfully");
-                return Ok(challenge);
-            }
+                _logger.LogInformation("Webhook verification request: mode={Mode}, token={Token}", mode, verifyToken);
 
-            _logger.LogWarning("Webhook verification failed — token mismatch");
-            return Forbid();
+                if (mode == "subscribe" && verifyToken == _verifyToken)
+                {
+                    _logger.LogInformation("Webhook verified successfully");
+                    return Ok(challenge);
+                }
+
+                _logger.LogWarning("Webhook verification failed — token mismatch");
+                return Forbid();
+            }
+            catch (System.Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying webhook token.");
+                return StatusCode(500, new { message = "Error verifying webhook token.", error = ex.Message });
+            }
         }
 
         /// <summary>

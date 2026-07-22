@@ -74,56 +74,91 @@ namespace BillingBackend.Controllers
         [HttpGet("check-username")]
         public async Task<ActionResult<bool>> CheckUsername([FromQuery] string username)
         {
-            var exists = await _authService.UsernameExistsAsync(username);
-            return Ok(exists);
+            try
+            {
+                var exists = await _authService.UsernameExistsAsync(username);
+                return Ok(exists);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error checking username availability.", error = ex.Message });
+            }
         }
 
         [HttpGet("check-email")]
         public async Task<ActionResult<bool>> CheckEmail([FromQuery] string email)
         {
-            var exists = await _authService.EmailExistsAsync(email);
-            return Ok(exists);
+            try
+            {
+                var exists = await _authService.EmailExistsAsync(email);
+                return Ok(exists);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error checking email availability.", error = ex.Message });
+            }
         }
 
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
         {
-            var code = await _authService.ForgotPasswordAsync(dto.Email);
-            if (code == null)
+            try
             {
-                return BadRequest("Email not found.");
+                var code = await _authService.ForgotPasswordAsync(dto.Email);
+                if (code == null)
+                {
+                    return BadRequest("Email not found.");
+                }
+                return Ok(new { message = "Password reset code sent successfully.", code = code });
             }
-            return Ok(new { message = "Password reset code sent successfully.", code = code });
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error requesting password reset.", error = ex.Message });
+            }
         }
 
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
         {
-            var success = await _authService.ResetPasswordAsync(dto.Email, dto.Token, dto.NewPassword);
-            if (!success)
+            try
             {
-                return BadRequest("Invalid code or code has expired.");
+                var success = await _authService.ResetPasswordAsync(dto.Email, dto.Token, dto.NewPassword);
+                if (!success)
+                {
+                    return BadRequest("Invalid code or code has expired.");
+                }
+                return Ok(new { message = "Password reset successfully." });
             }
-            return Ok(new { message = "Password reset successfully." });
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error resetting password.", error = ex.Message });
+            }
         }
 
         [Microsoft.AspNetCore.Authorization.Authorize]
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
         {
-            var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (claim == null)
+            try
             {
-                return Unauthorized();
-            }
-            int userId = int.Parse(claim.Value);
+                var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+                if (claim == null)
+                {
+                    return Unauthorized();
+                }
+                int userId = int.Parse(claim.Value);
 
-            var success = await _authService.ChangePasswordAsync(userId, dto.CurrentPassword, dto.NewPassword);
-            if (!success)
-            {
-                return BadRequest("Incorrect current password.");
+                var success = await _authService.ChangePasswordAsync(userId, dto.CurrentPassword, dto.NewPassword);
+                if (!success)
+                {
+                    return BadRequest("Incorrect current password.");
+                }
+                return Ok(new { message = "Password updated successfully." });
             }
-            return Ok(new { message = "Password updated successfully." });
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error changing password.", error = ex.Message });
+            }
         }
     }
 }

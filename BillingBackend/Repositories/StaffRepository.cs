@@ -22,24 +22,28 @@ namespace BillingBackend.Repositories
         public async Task<StaffMember?> GetByIdAsync(int businessId, int id)
         {
             return await _context.StaffMembers
+                .Include(s => s.Branch)
                 .FirstOrDefaultAsync(s => s.BusinessId == businessId && s.Id == id);
         }
 
         public async Task<StaffMember?> GetByUserIdAsync(int userId)
         {
             return await _context.StaffMembers
+                .Include(s => s.Branch)
                 .FirstOrDefaultAsync(s => s.UserId == userId);
         }
 
         public async Task<StaffMember?> GetByUserIdAndBusinessIdAsync(int userId, int businessId)
         {
             return await _context.StaffMembers
+                .Include(s => s.Branch)
                 .FirstOrDefaultAsync(s => s.UserId == userId && s.BusinessId == businessId);
         }
 
         public async Task<IEnumerable<StaffMember>> GetByBusinessIdAsync(int businessId)
         {
             return await _context.StaffMembers
+                .Include(s => s.Branch)
                 .Where(s => s.BusinessId == businessId)
                 .ToListAsync();
         }
@@ -143,6 +147,7 @@ namespace BillingBackend.Repositories
                     existing.Contact = staff.Contact;
                     existing.Role = staff.Role;
                     existing.Status = staff.Status;
+                    existing.BranchId = staff.BranchId;
                     existing.UpdatedAt = DateTime.UtcNow;
 
                     await _context.SaveChangesAsync();

@@ -10,5 +10,6 @@ namespace BillingBackend.DTOs
         public int BusinessId { get; set; }
         public string BusinessName { get; set; } = string.Empty;
         public int? StaffId { get; set; }
+        public bool OnboardingPending { get; set; }
     }
 }

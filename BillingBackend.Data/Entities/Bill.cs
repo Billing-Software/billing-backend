@@ -53,7 +53,27 @@ namespace BillingBackend.Data.Entities
         [MaxLength(500)]
         public string? InvoicePdfUrl { get; set; }
 
+        /// <summary>
+        /// Client-generated UUID to prevent duplicate bill creation on retries/double-clicks.
+        /// </summary>
+        [MaxLength(100)]
+        public string? IdempotencyKey { get; set; }
+
+        /// <summary>
+        /// External payment reference: UPI transaction ID, card auth code, etc.
+        /// </summary>
+        [MaxLength(200)]
+        public string? PaymentReference { get; set; }
+
+        /// <summary>
+        /// Staff notes or context about the bill (e.g., "Customer requested discount for loyalty").
+        /// </summary>
+        [MaxLength(500)]
+        public string? Notes { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime? UpdatedAt { get; set; }
 
         // Navigation
         [ForeignKey(nameof(BusinessId))]

@@ -18,23 +18,44 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ExpenseDto>>> GetAll()
         {
-            var expenses = await _expenseService.GetByBusinessIdAsync(CurrentBusinessId);
-            return Ok(expenses);
+            try
+            {
+                var expenses = await _expenseService.GetByBusinessIdAsync(CurrentBusinessId);
+                return Ok(expenses);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error fetching expenses.", error = ex.Message });
+            }
         }
 
         [HttpPost]
         public async Task<ActionResult<ExpenseDto>> Create(ExpenseDto dto)
         {
-            var created = await _expenseService.AddAsync(CurrentBusinessId, dto);
-            return Ok(created);
+            try
+            {
+                var created = await _expenseService.AddAsync(CurrentBusinessId, dto);
+                return Ok(created);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error creating expense record.", error = ex.Message });
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {
-            var deleted = await _expenseService.DeleteAsync(CurrentBusinessId, id);
-            if (!deleted) return BadRequest("Could not delete expense record.");
-            return NoContent();
+            try
+            {
+                var deleted = await _expenseService.DeleteAsync(CurrentBusinessId, id);
+                if (!deleted) return BadRequest("Could not delete expense record.");
+                return NoContent();
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error deleting expense record.", error = ex.Message });
+            }
         }
     }
 }

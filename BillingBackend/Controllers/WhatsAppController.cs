@@ -35,6 +35,10 @@ namespace BillingBackend.Controllers
             {
                 return BadRequest(new { error = ex.Message });
             }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error connecting WhatsApp account.", error = ex.Message });
+            }
         }
 
         /// <summary>
@@ -43,12 +47,19 @@ namespace BillingBackend.Controllers
         [HttpGet("status")]
         public async Task<ActionResult<WhatsAppAccountDto>> GetStatus()
         {
-            var status = await _whatsAppService.GetStatusAsync(CurrentBusinessId);
-            if (status == null)
+            try
             {
-                return Ok(new WhatsAppAccountDto { Status = "NotConnected" });
+                var status = await _whatsAppService.GetStatusAsync(CurrentBusinessId);
+                if (status == null)
+                {
+                    return Ok(new WhatsAppAccountDto { Status = "NotConnected" });
+                }
+                return Ok(status);
             }
-            return Ok(status);
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving WhatsApp connection status.", error = ex.Message });
+            }
         }
 
         /// <summary>
@@ -57,9 +68,16 @@ namespace BillingBackend.Controllers
         [HttpDelete("disconnect")]
         public async Task<ActionResult> Disconnect()
         {
-            var result = await _whatsAppService.DisconnectAsync(CurrentBusinessId);
-            if (!result) return NotFound("No WhatsApp account found to disconnect.");
-            return NoContent();
+            try
+            {
+                var result = await _whatsAppService.DisconnectAsync(CurrentBusinessId);
+                if (!result) return NotFound("No WhatsApp account found to disconnect.");
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error disconnecting WhatsApp account.", error = ex.Message });
+            }
         }
 
         /// <summary>
@@ -76,6 +94,10 @@ namespace BillingBackend.Controllers
             catch (InvalidOperationException ex)
             {
                 return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error sending WhatsApp text message.", error = ex.Message });
             }
         }
 
@@ -94,6 +116,10 @@ namespace BillingBackend.Controllers
             {
                 return BadRequest(new { error = ex.Message });
             }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error sending WhatsApp document.", error = ex.Message });
+            }
         }
 
         /// <summary>
@@ -111,6 +137,10 @@ namespace BillingBackend.Controllers
             {
                 return BadRequest(new { error = ex.Message });
             }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error sending WhatsApp template message.", error = ex.Message });
+            }
         }
 
         /// <summary>
@@ -119,8 +149,15 @@ namespace BillingBackend.Controllers
         [HttpGet("messages")]
         public async Task<ActionResult<IEnumerable<MessageLogDto>>> GetMessages([FromQuery] int? billId = null)
         {
-            var logs = await _whatsAppService.GetMessageLogsAsync(CurrentBusinessId, billId);
-            return Ok(logs);
+            try
+            {
+                var logs = await _whatsAppService.GetMessageLogsAsync(CurrentBusinessId, billId);
+                return Ok(logs);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving WhatsApp message logs.", error = ex.Message });
+            }
         }
     }
 }

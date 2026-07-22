@@ -18,60 +18,100 @@ namespace BillingBackend.Services
 
         public async Task<CustomerDto?> GetByIdAsync(int businessId, int id)
         {
-            var customer = await _customerRepository.GetByIdAsync(businessId, id);
-            return customer == null ? null : MapToDto(customer);
+            try
+            {
+                var customer = await _customerRepository.GetByIdAsync(businessId, id);
+                return customer == null ? null : MapToDto(customer);
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[CustomerService.GetByIdAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<IEnumerable<CustomerDto>> GetByBusinessIdAsync(int businessId)
         {
-            var customers = await _customerRepository.GetByBusinessIdAsync(businessId);
-            return customers.Select(MapToDto);
+            try
+            {
+                var customers = await _customerRepository.GetByBusinessIdAsync(businessId);
+                return customers.Select(MapToDto);
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[CustomerService.GetByBusinessIdAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<CustomerDto> AddAsync(int businessId, CustomerDto dto)
         {
-            if (dto.IsWalkIn)
+            try
             {
-                var existing = await _customerRepository.GetByBusinessIdAsync(businessId);
-                var walkIn = existing.FirstOrDefault(c => c.IsWalkIn);
-                if (walkIn != null)
+                if (dto.IsWalkIn)
                 {
-                    return MapToDto(walkIn);
+                    var existing = await _customerRepository.GetByBusinessIdAsync(businessId);
+                    var walkIn = existing.FirstOrDefault(c => c.IsWalkIn);
+                    if (walkIn != null)
+                    {
+                        return MapToDto(walkIn);
+                    }
                 }
+
+                var customer = new Customer
+                {
+                    BusinessId = businessId,
+                    Name = dto.Name,
+                    Phone = dto.Phone,
+                    Email = dto.Email,
+                    IsWalkIn = dto.IsWalkIn
+                };
+
+                var added = await _customerRepository.AddAsync(customer);
+                return MapToDto(added);
             }
-
-            var customer = new Customer
+            catch (System.Exception ex)
             {
-                BusinessId = businessId,
-                Name = dto.Name,
-                Phone = dto.Phone,
-                Email = dto.Email,
-                IsWalkIn = dto.IsWalkIn
-            };
-
-            var added = await _customerRepository.AddAsync(customer);
-            return MapToDto(added);
+                System.Console.WriteLine($"[CustomerService.AddAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<CustomerDto> UpdateAsync(int businessId, CustomerDto dto)
         {
-            var customer = new Customer
+            try
             {
-                Id = dto.Id,
-                BusinessId = businessId,
-                Name = dto.Name,
-                Phone = dto.Phone,
-                Email = dto.Email,
-                IsWalkIn = dto.IsWalkIn
-            };
+                var customer = new Customer
+                {
+                    Id = dto.Id,
+                    BusinessId = businessId,
+                    Name = dto.Name,
+                    Phone = dto.Phone,
+                    Email = dto.Email,
+                    IsWalkIn = dto.IsWalkIn
+                };
 
-            var updated = await _customerRepository.UpdateAsync(customer);
-            return MapToDto(updated);
+                var updated = await _customerRepository.UpdateAsync(customer);
+                return MapToDto(updated);
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[CustomerService.UpdateAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<bool> DeleteAsync(int businessId, int id)
         {
-            return await _customerRepository.DeleteAsync(businessId, id);
+            try
+            {
+                return await _customerRepository.DeleteAsync(businessId, id);
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[CustomerService.DeleteAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         private CustomerDto MapToDto(Customer c)

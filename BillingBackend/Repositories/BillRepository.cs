@@ -27,6 +27,18 @@ namespace BillingBackend.Repositories
                 .FirstOrDefaultAsync(b => b.BusinessId == businessId && b.Id == id);
         }
 
+        public async Task<Bill?> GetByIdempotencyKeyAsync(int businessId, string idempotencyKey)
+        {
+            if (string.IsNullOrEmpty(idempotencyKey)) return null;
+
+            return await _context.Bills
+                .Include(b => b.Items)
+                .Include(b => b.Customer)
+                .Include(b => b.Branch)
+                .Include(b => b.CreatedByStaff)
+                .FirstOrDefaultAsync(b => b.BusinessId == businessId && b.IdempotencyKey == idempotencyKey);
+        }
+
         public async Task<IEnumerable<Bill>> GetByBusinessIdAsync(
             int businessId,
             int? customerId = null,
@@ -96,6 +108,17 @@ namespace BillingBackend.Repositories
                 try
                 {
                     bill.CreatedAt = DateTime.UtcNow;
+
+                    // Server-side Bill Number generation to prevent client side manipulation and collisions.
+                    // Format: INV-YYYYMMDD-XXXX where XXXX is a daily sequential index starting at 0001
+                    var today = DateTime.UtcNow.Date;
+                    var todayStr = today.ToString("yyyyMMdd");
+                    
+                    var dailyCount = await _context.Bills
+                        .Where(b => b.BusinessId == bill.BusinessId && b.CreatedAt >= today)
+                        .CountAsync();
+
+                    bill.BillNumber = $"INV-{todayStr}-{(dailyCount + 1).ToString("D4")}";
                     
                     var options = new System.Text.Json.JsonSerializerOptions 
                     { 
@@ -135,6 +158,13 @@ namespace BillingBackend.Repositories
                     throw;
                 }
             }
+        }
+
+        public async Task UpdateAsync(Bill bill)
+        {
+            bill.UpdatedAt = DateTime.UtcNow;
+            _context.Bills.Update(bill);
+            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> DeleteAsync(int businessId, int id)

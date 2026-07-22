@@ -66,6 +66,20 @@ namespace BillingBackend.Data.Entities
         [MaxLength(50)]
         public string ReceiptTemplateType { get; set; } = "Thermal80mm";
         public bool IsSuspended { get; set; } = false;
+        public int ActivePlanId { get; set; } = 1; // Default to Plan 1
+        public int AllowedBranches { get; set; } = 1; // Default Starter Plan branch limit
+        public int AllowedStaff { get; set; } = 2; // Default Starter Plan staff limit
+
+        [MaxLength(100)]
+        public string? RazorpayCustomerId { get; set; }
+
+        [MaxLength(100)]
+        public string? RazorpaySubscriptionId { get; set; }
+
+        [MaxLength(50)]
+        public string SubscriptionStatus { get; set; } = "Inactive"; // Inactive, Active, PastDue, Cancelled
+
+        public DateTime? SubscriptionExpiresAt { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
 

@@ -39,6 +39,8 @@ namespace BillingBackend.Data.Entities
         [MaxLength(20)]
         public string Status { get; set; } = "Active";
 
+        public int? BranchId { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
 
@@ -48,6 +50,9 @@ namespace BillingBackend.Data.Entities
 
         [ForeignKey(nameof(UserId))]
         public User? User { get; set; }
+
+        [ForeignKey(nameof(BranchId))]
+        public Branch? Branch { get; set; }
 
         public ICollection<Bill> CreatedBills { get; set; } = new List<Bill>();
     }

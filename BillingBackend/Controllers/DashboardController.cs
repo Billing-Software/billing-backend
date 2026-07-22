@@ -17,15 +17,22 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<DashboardDataDto>> GetDashboardData()
         {
-            if (CurrentUserRole != "Owner")
+            try
             {
-                var data = await _dashboardService.GetStaffDashboardDataAsync(CurrentBusinessId, CurrentUserId);
-                return Ok(data);
+                if (CurrentUserRole != "Owner")
+                {
+                    var data = await _dashboardService.GetStaffDashboardDataAsync(CurrentBusinessId, CurrentUserId);
+                    return Ok(data);
+                }
+                else
+                {
+                    var data = await _dashboardService.GetDashboardDataAsync(CurrentBusinessId);
+                    return Ok(data);
+                }
             }
-            else
+            catch (System.Exception ex)
             {
-                var data = await _dashboardService.GetDashboardDataAsync(CurrentBusinessId);
-                return Ok(data);
+                return StatusCode(500, new { message = "Error loading dashboard metrics.", error = ex.Message });
             }
         }
     }

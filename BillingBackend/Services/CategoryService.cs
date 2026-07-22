@@ -19,53 +19,77 @@ namespace BillingBackend.Services
 
         public async Task<IEnumerable<CategoryDto>> GetByBusinessIdAsync(int businessId)
         {
-            var list = await _categoryRepository.GetByBusinessIdAsync(businessId);
-            return list.Select(MapToDto);
+            try
+            {
+                var list = await _categoryRepository.GetByBusinessIdAsync(businessId);
+                return list.Select(MapToDto);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CategoryService.GetByBusinessIdAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<CategoryDto> AddAsync(int businessId, CategoryDto dto)
         {
-            var category = new Category
+            try
             {
-                BusinessId = businessId,
-                Name = dto.Name,
-                Type = dto.Type,
-                ParentId = dto.ParentId
-            };
+                var category = new Category
+                {
+                    BusinessId = businessId,
+                    Name = dto.Name,
+                    Type = dto.Type,
+                    ParentId = dto.ParentId
+                };
 
-            var added = await _categoryRepository.AddAsync(category);
-            return MapToDto(added);
+                var added = await _categoryRepository.AddAsync(category);
+                return MapToDto(added);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CategoryService.AddAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<CategoryDto?> UpdateAsync(int businessId, int id, CategoryDto dto)
         {
-            var existing = await _categoryRepository.GetByIdAsync(businessId, id);
-            if (existing == null)
+            try
             {
-                return null;
-            }
-
-            if (dto.ParentId.HasValue)
-            {
-                if (dto.ParentId.Value == id)
+                var existing = await _categoryRepository.GetByIdAsync(businessId, id);
+                if (existing == null)
                 {
-                    throw new InvalidOperationException("A category cannot be its own parent.");
+                    return null;
                 }
 
-                // Check for cyclic dependency
-                var allCategories = (await _categoryRepository.GetByBusinessIdAsync(businessId)).ToList();
-                if (IsDescendant(id, dto.ParentId.Value, allCategories))
+                if (dto.ParentId.HasValue)
                 {
-                    throw new InvalidOperationException("A category cannot have a descendant as its parent.");
+                    if (dto.ParentId.Value == id)
+                    {
+                        throw new InvalidOperationException("A category cannot be its own parent.");
+                    }
+
+                    // Check for cyclic dependency
+                    var allCategories = (await _categoryRepository.GetByBusinessIdAsync(businessId)).ToList();
+                    if (IsDescendant(id, dto.ParentId.Value, allCategories))
+                    {
+                        throw new InvalidOperationException("A category cannot have a descendant as its parent.");
+                    }
                 }
+
+                existing.Name = dto.Name;
+                existing.Type = dto.Type;
+                existing.ParentId = dto.ParentId;
+
+                var updated = await _categoryRepository.UpdateAsync(existing);
+                return updated == null ? null : MapToDto(updated);
             }
-
-            existing.Name = dto.Name;
-            existing.Type = dto.Type;
-            existing.ParentId = dto.ParentId;
-
-            var updated = await _categoryRepository.UpdateAsync(existing);
-            return updated == null ? null : MapToDto(updated);
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CategoryService.UpdateAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         private bool IsDescendant(int parentId, int potentialDescendantId, List<Category> allCategories)
@@ -89,7 +113,15 @@ namespace BillingBackend.Services
 
         public async Task<bool> DeleteAsync(int businessId, int id)
         {
-            return await _categoryRepository.DeleteAsync(businessId, id);
+            try
+            {
+                return await _categoryRepository.DeleteAsync(businessId, id);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CategoryService.DeleteAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         private CategoryDto MapToDto(Category c)

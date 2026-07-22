@@ -18,31 +18,59 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PurchaseDto>>> GetAll()
         {
-            var purchases = await _purchaseService.GetByBusinessIdAsync(CurrentBusinessId);
-            return Ok(purchases);
+            try
+            {
+                var purchases = await _purchaseService.GetByBusinessIdAsync(CurrentBusinessId);
+                return Ok(purchases);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error fetching purchase records.", error = ex.Message });
+            }
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<PurchaseDto>> GetById(int id)
         {
-            var purchase = await _purchaseService.GetByIdAsync(CurrentBusinessId, id);
-            if (purchase == null) return NotFound("Purchase record not found.");
-            return Ok(purchase);
+            try
+            {
+                var purchase = await _purchaseService.GetByIdAsync(CurrentBusinessId, id);
+                if (purchase == null) return NotFound("Purchase record not found.");
+                return Ok(purchase);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error fetching purchase record details.", error = ex.Message });
+            }
         }
 
         [HttpPost]
         public async Task<ActionResult<PurchaseDto>> Create(PurchaseDto dto)
         {
-            var created = await _purchaseService.AddAsync(CurrentBusinessId, dto);
-            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            try
+            {
+                var created = await _purchaseService.AddAsync(CurrentBusinessId, dto);
+                return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error creating purchase record.", error = ex.Message });
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {
-            var deleted = await _purchaseService.DeleteAsync(CurrentBusinessId, id);
-            if (!deleted) return BadRequest("Could not delete purchase record.");
-            return NoContent();
+            try
+            {
+                var deleted = await _purchaseService.DeleteAsync(CurrentBusinessId, id);
+                if (!deleted) return BadRequest("Could not delete purchase record.");
+                return NoContent();
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error deleting purchase record.", error = ex.Message });
+            }
         }
     }
 }

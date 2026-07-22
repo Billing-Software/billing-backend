@@ -85,6 +85,7 @@ namespace BillingBackend.Extensions
             services.AddScoped<IPurchaseService, PurchaseService>();
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<IEmailService, EmailService>();
+            services.AddScoped<IAuditService, AuditService>();
 
             // WhatsApp Integration Module
             services.AddScoped<IWhatsAppRepository, WhatsAppRepository>();
@@ -92,6 +93,7 @@ namespace BillingBackend.Extensions
             services.AddScoped<IWebhookService, WebhookService>();
             services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
             services.AddHttpClient<IMetaApiClient, MetaApiClient>();
+            services.AddHttpClient<IRazorpayService, RazorpayService>();
 
             // Storage Service configuration
             services.AddHttpContextAccessor();

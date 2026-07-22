@@ -26,6 +26,11 @@ namespace BillingBackend.Data
         public DbSet<PurchaseItem> PurchaseItems { get; set; }
         public DbSet<Category> Categories { get; set; }
         public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
+        public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+        public DbSet<PendingRegistration> PendingRegistrations { get; set; }
+        public DbSet<PaymentTransaction> PaymentTransactions { get; set; }
+        public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<WebhookEventLog> WebhookEventLogs { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -138,6 +143,11 @@ namespace BillingBackend.Data
 
                 // Unique bill number per business
                 entity.HasIndex(bill => new { bill.BusinessId, bill.BillNumber }).IsUnique();
+
+                // Unique idempotency key per business (prevents duplicate bill creation)
+                entity.HasIndex(bill => new { bill.BusinessId, bill.IdempotencyKey })
+                    .IsUnique()
+                    .HasFilter("\"IdempotencyKey\" IS NOT NULL");
             });
 
             // ===== BillItems =====
@@ -217,6 +227,31 @@ namespace BillingBackend.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(rt => rt.Token).IsUnique();
+            });
+
+            // ===== PendingRegistrations =====
+            modelBuilder.Entity<PendingRegistration>(entity =>
+            {
+                entity.HasIndex(pr => pr.Token).IsUnique();
+                entity.HasIndex(pr => pr.Email);
+            });
+
+            // ===== AuditLogs =====
+            modelBuilder.Entity<AuditLog>(entity =>
+            {
+                entity.HasIndex(a => new { a.EntityType, a.EntityId });
+                entity.HasIndex(a => a.BusinessId);
+                entity.HasIndex(a => a.CreatedAt);
+                entity.HasIndex(a => a.CorrelationId);
+            });
+
+            // ===== WebhookEventLogs =====
+            modelBuilder.Entity<WebhookEventLog>(entity =>
+            {
+                entity.HasIndex(w => new { w.Source, w.ExternalEventId }).IsUnique()
+                    .HasFilter("\"ExternalEventId\" IS NOT NULL");
+                entity.HasIndex(w => w.ProcessingStatus);
+                entity.HasIndex(w => w.CreatedAt);
             });
         }
     }

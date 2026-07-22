@@ -71,6 +71,15 @@ namespace BillingBackend.Services
             await _userRepository.AddRefreshTokenAsync(dbRefreshToken);
             await _userRepository.SaveChangesAsync();
 
+            var business = await _businessRepository.GetByIdAsync(result.BusinessId);
+            bool onboardingPending = false;
+            if (business != null)
+            {
+                onboardingPending = string.IsNullOrEmpty(business.Address) || 
+                                    string.IsNullOrEmpty(business.City) || 
+                                    string.IsNullOrEmpty(business.Phone);
+            }
+
             return new AuthResponseDto
             {
                 Token = token,
@@ -79,7 +88,8 @@ namespace BillingBackend.Services
                 Email = result.Email,
                 Role = result.Role,
                 BusinessId = result.BusinessId,
-                BusinessName = result.BusinessName
+                BusinessName = result.BusinessName,
+                OnboardingPending = onboardingPending
             };
         }
 
@@ -89,6 +99,12 @@ namespace BillingBackend.Services
 
             if (user == null)
             {
+                var pending = await _userRepository.GetPendingRegistrationByEmailAsync(loginDto.Email);
+                if (pending != null)
+                {
+                    throw new InvalidOperationException("Account activation pending: Please complete your subscription payment on our web portal to activate your account.");
+                }
+
                 Console.WriteLine($"[AUTH_DEBUG] Login failed: User identity '{loginDto.Email}' not found in database by email.");
                 return null;
             }
@@ -174,6 +190,18 @@ namespace BillingBackend.Services
             await _userRepository.AddRefreshTokenAsync(dbRefreshToken);
             await _userRepository.SaveChangesAsync();
 
+            bool onboardingPending = false;
+            if (user.Role == "Owner")
+            {
+                var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
+                if (business != null)
+                {
+                    onboardingPending = string.IsNullOrEmpty(business.Address) || 
+                                        string.IsNullOrEmpty(business.City) || 
+                                        string.IsNullOrEmpty(business.Phone);
+                }
+            }
+
             return new AuthResponseDto
             {
                 Token = token,
@@ -183,7 +211,8 @@ namespace BillingBackend.Services
                 Role = user.Role,
                 BusinessId = businessId + 1000, // Return as 4-digit ID (e.g. 1 -> 1001)
                 BusinessName = businessName,
-                StaffId = staffId
+                StaffId = staffId,
+                OnboardingPending = onboardingPending
             };
         }
 
@@ -367,6 +396,18 @@ namespace BillingBackend.Services
             await _userRepository.AddRefreshTokenAsync(newDbRefreshToken);
             await _userRepository.SaveChangesAsync();
 
+            bool onboardingPending = false;
+            if (user.Role == "Owner")
+            {
+                var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
+                if (business != null)
+                {
+                    onboardingPending = string.IsNullOrEmpty(business.Address) || 
+                                        string.IsNullOrEmpty(business.City) || 
+                                        string.IsNullOrEmpty(business.Phone);
+                }
+            }
+
             return new AuthResponseDto
             {
                 Token = token,
@@ -376,7 +417,8 @@ namespace BillingBackend.Services
                 Role = user.Role,
                 BusinessId = user.Role == "SuperAdmin" ? businessId : businessId + 1000,
                 BusinessName = businessName,
-                StaffId = staffId
+                StaffId = staffId,
+                OnboardingPending = onboardingPending
             };
         }
     }

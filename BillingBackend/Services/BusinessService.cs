@@ -16,40 +16,56 @@ namespace BillingBackend.Services
 
         public async Task<BusinessDto?> GetByIdAsync(int id)
         {
-            var business = await _businessRepository.GetByIdAsync(id);
-            if (business == null) return null;
+            try
+            {
+                var business = await _businessRepository.GetByIdAsync(id);
+                if (business == null) return null;
 
-            return MapToDto(business);
+                return MapToDto(business);
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[BusinessService.GetByIdAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<BusinessDto> UpdateAsync(BusinessDto dto)
         {
-            var business = new Business
+            try
             {
-                Id = dto.Id,
-                OwnerId = dto.OwnerId,
-                LegalName = dto.LegalName,
-                TradingName = dto.TradingName,
-                LogoUrl = dto.LogoUrl,
-                Address = dto.Address,
-                City = dto.City,
-                State = dto.State,
-                PostalCode = dto.PostalCode,
-                Country = dto.Country ?? "India",
-                Phone = dto.Phone,
-                Email = dto.Email,
-                Website = dto.Website,
-                GstIn = dto.GstIn,
-                DefaultTaxRate = dto.DefaultTaxRate,
-                PricesIncludeTax = dto.PricesIncludeTax,
-                ReceiptHeader = dto.ReceiptHeader,
-                ReceiptFooter = dto.ReceiptFooter,
-                ShowLogoOnReceipt = dto.ShowLogoOnReceipt,
-                ReceiptTemplateType = dto.ReceiptTemplateType ?? "Thermal80mm"
-            };
+                var business = new Business
+                {
+                    Id = dto.Id,
+                    OwnerId = dto.OwnerId,
+                    LegalName = dto.LegalName,
+                    TradingName = dto.TradingName,
+                    LogoUrl = dto.LogoUrl,
+                    Address = dto.Address,
+                    City = dto.City,
+                    State = dto.State,
+                    PostalCode = dto.PostalCode,
+                    Country = dto.Country ?? "India",
+                    Phone = dto.Phone,
+                    Email = dto.Email,
+                    Website = dto.Website,
+                    GstIn = dto.GstIn,
+                    DefaultTaxRate = dto.DefaultTaxRate,
+                    PricesIncludeTax = dto.PricesIncludeTax,
+                    ReceiptHeader = dto.ReceiptHeader,
+                    ReceiptFooter = dto.ReceiptFooter,
+                    ShowLogoOnReceipt = dto.ShowLogoOnReceipt,
+                    ReceiptTemplateType = dto.ReceiptTemplateType ?? "Thermal80mm"
+                };
 
-            var updated = await _businessRepository.UpdateAsync(business);
-            return MapToDto(updated);
+                var updated = await _businessRepository.UpdateAsync(business);
+                return MapToDto(updated);
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[BusinessService.UpdateAsync Error]: {ex.Message}");
+                throw;
+            }
         }
 
         private BusinessDto MapToDto(Business b)

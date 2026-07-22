@@ -19,16 +19,30 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<InventoryDto>>> GetAll()
         {
-            var items = await _inventoryService.GetByBusinessIdAsync(CurrentBusinessId);
-            return Ok(items);
+            try
+            {
+                var items = await _inventoryService.GetByBusinessIdAsync(CurrentBusinessId);
+                return Ok(items);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error fetching inventory items.", error = ex.Message });
+            }
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<InventoryDto>> GetById(int id)
         {
-            var item = await _inventoryService.GetByIdAsync(CurrentBusinessId, id);
-            if (item == null) return NotFound("Inventory item not found.");
-            return Ok(item);
+            try
+            {
+                var item = await _inventoryService.GetByIdAsync(CurrentBusinessId, id);
+                if (item == null) return NotFound("Inventory item not found.");
+                return Ok(item);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error fetching inventory details.", error = ex.Message });
+            }
         }
 
         [HttpPost]
@@ -42,6 +56,10 @@ namespace BillingBackend.Controllers
             catch (InvalidOperationException ex)
             {
                 return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error creating inventory item.", error = ex.Message });
             }
         }
 
@@ -58,14 +76,25 @@ namespace BillingBackend.Controllers
             {
                 return BadRequest(ex.Message);
             }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error updating inventory item.", error = ex.Message });
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {
-            var deleted = await _inventoryService.DeleteAsync(CurrentBusinessId, id);
-            if (!deleted) return BadRequest("Could not delete inventory item.");
-            return NoContent();
+            try
+            {
+                var deleted = await _inventoryService.DeleteAsync(CurrentBusinessId, id);
+                if (!deleted) return BadRequest("Could not delete inventory item.");
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error deleting inventory item.", error = ex.Message });
+            }
         }
     }
 }

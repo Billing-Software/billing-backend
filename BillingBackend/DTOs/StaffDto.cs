@@ -28,6 +28,9 @@ namespace BillingBackend.DTOs
         [StringLength(20)]
         public string Status { get; set; } = "Active";
 
+        public int? BranchId { get; set; }
+        public string? BranchName { get; set; }
+
         public string? Password { get; set; }
     }
 }

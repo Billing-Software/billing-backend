@@ -19,6 +19,8 @@ namespace BillingBackend.Repositories
             decimal? minAmount = null,
             decimal? maxAmount = null);
         Task<Bill> AddAsync(Bill bill, string itemsJson);
+        Task<Bill?> GetByIdempotencyKeyAsync(int businessId, string idempotencyKey);
+        Task UpdateAsync(Bill bill);
         Task<bool> DeleteAsync(int businessId, int id);
     }
 }

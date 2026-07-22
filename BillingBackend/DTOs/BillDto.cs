@@ -62,6 +62,11 @@ namespace BillingBackend.DTOs
         public string? StaffName { get; set; }
         public string? BranchName { get; set; }
 
+        // Payment tracking fields
+        public string? IdempotencyKey { get; set; }
+        public string? PaymentReference { get; set; }
+        public string? Notes { get; set; }
+
         // Line Items
         public List<BillItemDto> Items { get; set; } = new List<BillItemDto>();
     }
@@ -87,6 +92,24 @@ namespace BillingBackend.DTOs
         public decimal TotalAmount { get; set; }
         public string PaymentMethod { get; set; } = "Cash";
         public string Status { get; set; } = "Pending";
+
+        /// <summary>
+        /// Client-generated UUID to prevent duplicate bill creation.
+        /// </summary>
+        [StringLength(100)]
+        public string? IdempotencyKey { get; set; }
+
+        /// <summary>
+        /// External payment reference (UPI transaction ID, card auth code, etc.)
+        /// </summary>
+        [StringLength(200)]
+        public string? PaymentReference { get; set; }
+
+        /// <summary>
+        /// Staff notes about the transaction.
+        /// </summary>
+        [StringLength(500)]
+        public string? Notes { get; set; }
 
         [Required]
         public List<BillItemDto> Items { get; set; } = new List<BillItemDto>();

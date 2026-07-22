@@ -17,21 +17,35 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<BusinessDto>> GetProfile()
         {
-            var business = await _businessService.GetByIdAsync(CurrentBusinessId);
-            if (business == null) return NotFound("Business not found.");
-            return Ok(business);
+            try
+            {
+                var business = await _businessService.GetByIdAsync(CurrentBusinessId);
+                if (business == null) return NotFound("Business not found.");
+                return Ok(business);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving business profile.", error = ex.Message });
+            }
         }
 
         [HttpPut]
         public async Task<ActionResult<BusinessDto>> UpdateProfile(BusinessDto dto)
         {
-            if (dto.Id != CurrentBusinessId)
+            try
             {
-                return BadRequest("Invalid business ID.");
-            }
+                if (dto.Id != CurrentBusinessId)
+                {
+                    return BadRequest("Invalid business ID.");
+                }
 
-            var updated = await _businessService.UpdateAsync(dto);
-            return Ok(updated);
+                var updated = await _businessService.UpdateAsync(dto);
+                return Ok(updated);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { message = "Error updating business profile.", error = ex.Message });
+            }
         }
     }
 }
