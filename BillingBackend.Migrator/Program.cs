@@ -1,7 +1,8 @@
 using BillingBackend.Data;
+using BillingBackend.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Oracle.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.IO;
 
@@ -22,6 +23,7 @@ namespace BillingBackend.Migrator
                 // Search in project root and parent directories
                 .AddJsonFile(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "BillingBackend", "appsettings.json"), optional: true)
                 .AddJsonFile(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "BillingBackend", "appsettings.json"), optional: true)
+                .AddEnvironmentVariables()
                 .Build();
 
             var connectionString = configuration.GetConnectionString("DefaultConnection");
@@ -35,12 +37,15 @@ namespace BillingBackend.Migrator
 
             Console.WriteLine($"Using Connection String: {connectionString}");
 
-            var optionsBuilder = new DbContextOptionsBuilder<BillingDbContext>();
-            optionsBuilder.UseOracle(connectionString, b => 
-                b.UseOracleSQLCompatibility(OracleSQLCompatibility.DatabaseVersion19));
+            // 2. Register Database via BillingBackend's exact AddDatabase extension method
+            var services = new ServiceCollection();
+            services.AddDatabase(configuration);
 
-            using (var context = new BillingDbContext(optionsBuilder.Options))
+            var serviceProvider = services.BuildServiceProvider();
+
+            using (var scope = serviceProvider.CreateScope())
             {
+                var context = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
                 try
                 {
                     Console.WriteLine("\n[1/2] Applying latest schema alters (columns, constraints, and new tables)...");
