@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace BillingBackend.Data.Entities
 {
     public class PendingRegistration
@@ -21,9 +23,11 @@ namespace BillingBackend.Data.Entities
         public string Username { get; set; } = string.Empty;
 
         [Required]
+        [Column(TypeName = "RAW(2000)")]
         public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
 
         [Required]
+        [Column(TypeName = "RAW(2000)")]
         public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
 
         [Required]
@@ -59,6 +63,7 @@ namespace BillingBackend.Data.Entities
 
         public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddHours(24);
 
+        [Column(TypeName = "NCLOB")]
         public string? RawRegistrationData { get; set; }
     }
 }

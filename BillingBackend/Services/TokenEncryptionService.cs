@@ -16,8 +16,8 @@ namespace BillingBackend.Services
 
         public TokenEncryptionService(IConfiguration configuration)
         {
-            var keyBase64 = configuration["Meta:TokenEncryptionKey"];
-            if (string.IsNullOrEmpty(keyBase64))
+            var rawKey = configuration["Meta:TokenEncryptionKey"];
+            if (string.IsNullOrEmpty(rawKey))
             {
                 // Generate a deterministic key from AppSecret if no dedicated key is set
                 var appSecret = configuration["Meta:AppSecret"] ?? "default-dev-secret-do-not-use";
@@ -26,11 +26,26 @@ namespace BillingBackend.Services
             }
             else
             {
-                _key = Convert.FromBase64String(keyBase64);
+                try
+                {
+                    var bytes = Convert.FromBase64String(rawKey);
+                    if (bytes.Length == 32)
+                    {
+                        _key = bytes;
+                    }
+                    else
+                    {
+                        using var sha256 = SHA256.Create();
+                        _key = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawKey));
+                    }
+                }
+                catch (FormatException)
+                {
+                    // If rawKey is plain text, derive exact 32-byte AES key using SHA256 hash
+                    using var sha256 = SHA256.Create();
+                    _key = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawKey));
+                }
             }
-
-            if (_key.Length != 32)
-                throw new ArgumentException("TokenEncryptionKey must be exactly 32 bytes (256 bits).");
         }
 
         public string Encrypt(string plainText)

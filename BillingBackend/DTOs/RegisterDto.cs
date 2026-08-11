@@ -60,5 +60,14 @@ namespace BillingBackend.DTOs
         public decimal DefaultTaxRate { get; set; } = 18.00m;
 
         public bool PricesIncludeTax { get; set; } = true;
+
+        [StringLength(100)]
+        public string BusinessType { get; set; } = "General Retail Store";
+
+        [StringLength(50)]
+        public string GstScheme { get; set; } = "Regular";
+
+        [StringLength(100)]
+        public string? RegisteredState { get; set; }
     }
 }

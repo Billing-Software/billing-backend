@@ -7,12 +7,17 @@ namespace BillingBackend.DTOs
     // ===== Connection DTOs =====
 
     /// <summary>
-    /// Received from Meta Embedded Signup — the authorization code to exchange for a token.
+    /// Received from Meta Embedded Signup — authorization code, plus optional sessionInfo data (WABA ID, phone number ID).
     /// </summary>
     public class WhatsAppConnectCallbackDto
     {
         [Required]
         public string Code { get; set; } = string.Empty;
+
+        public string? WabaId { get; set; }
+        public string? PhoneNumberId { get; set; }
+        public string? DisplayPhoneNumber { get; set; }
+        public string? RedirectUri { get; set; }
     }
 
     /// <summary>
@@ -23,6 +28,7 @@ namespace BillingBackend.DTOs
         public int Id { get; set; }
         public string? DisplayPhoneNumber { get; set; }
         public string? WabaId { get; set; }
+        public string? PhoneNumberId { get; set; }
         public string Status { get; set; } = string.Empty;
         public DateTime ConnectedAt { get; set; }
         public DateTime? DisconnectedAt { get; set; }
@@ -68,6 +74,27 @@ namespace BillingBackend.DTOs
         /// Template parameter values keyed by parameter name.
         /// </summary>
         public Dictionary<string, string>? Parameters { get; set; }
+    }
+
+    public class WhatsAppTemplateDto
+    {
+        public int Id { get; set; }
+        public string TemplateName { get; set; } = string.Empty;
+        public string Language { get; set; } = "en";
+        public string Category { get; set; } = "UTILITY";
+        public string? BodyText { get; set; }
+        public string Status { get; set; } = "PENDING";
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class SendInvoiceTemplateRequestDto
+    {
+        [Required]
+        public int BillId { get; set; }
+
+        [Required]
+        [MaxLength(20)]
+        public string Phone { get; set; } = string.Empty;
     }
 
     // ===== Message Log DTO =====

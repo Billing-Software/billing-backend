@@ -86,6 +86,9 @@ namespace BillingBackend.Extensions
             services.AddScoped<ICategoryService, CategoryService>();
             services.AddScoped<IEmailService, EmailService>();
             services.AddScoped<IAuditService, AuditService>();
+            services.AddScoped<IBusinessConfigurationService, BusinessConfigurationService>();
+            services.AddScoped<ITaxService, TaxService>();
+            services.AddScoped<IReportService, ReportService>();
 
             // WhatsApp Integration Module
             services.AddScoped<IWhatsAppRepository, WhatsAppRepository>();

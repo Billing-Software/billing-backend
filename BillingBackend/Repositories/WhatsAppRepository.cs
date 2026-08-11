@@ -122,5 +122,40 @@ namespace BillingBackend.Repositories
 
             await _context.SaveChangesAsync();
         }
+
+        public async Task<WhatsAppTemplate?> GetTemplateByNameAsync(int whatsAppAccountId, string templateName)
+        {
+            return await _context.WhatsAppTemplates
+                .FirstOrDefaultAsync(t => t.WhatsAppAccountId == whatsAppAccountId && t.TemplateName == templateName);
+        }
+
+        public async Task<IEnumerable<WhatsAppTemplate>> GetTemplatesByAccountAsync(int whatsAppAccountId)
+        {
+            return await _context.WhatsAppTemplates
+                .Where(t => t.WhatsAppAccountId == whatsAppAccountId)
+                .OrderByDescending(t => t.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<WhatsAppTemplate> SaveTemplateAsync(WhatsAppTemplate template)
+        {
+            var existing = await GetTemplateByNameAsync(template.WhatsAppAccountId, template.TemplateName);
+            if (existing == null)
+            {
+                await _context.WhatsAppTemplates.AddAsync(template);
+            }
+            else
+            {
+                existing.Status = template.Status;
+                existing.BodyText = template.BodyText;
+                existing.Category = template.Category;
+                existing.Language = template.Language;
+                existing.UpdatedAt = DateTime.UtcNow;
+                template = existing;
+            }
+
+            await _context.SaveChangesAsync();
+            return template;
+        }
     }
 }

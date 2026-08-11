@@ -23,6 +23,9 @@ namespace BillingBackend.Data.Entities
         [MaxLength(256)]
         public string? Email { get; set; }
 
+        [MaxLength(50)]
+        public string? GstIn { get; set; }
+
         public bool IsWalkIn { get; set; } = false;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

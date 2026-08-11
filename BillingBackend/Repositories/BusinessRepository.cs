@@ -47,6 +47,7 @@ namespace BillingBackend.Repositories
             existing.Email = business.Email;
             existing.Website = business.Website;
             existing.GstIn = business.GstIn;
+            existing.GstScheme = business.GstScheme;
             existing.DefaultTaxRate = business.DefaultTaxRate;
             existing.PricesIncludeTax = business.PricesIncludeTax;
             existing.ReceiptHeader = business.ReceiptHeader;

@@ -72,6 +72,9 @@ namespace BillingBackend.Repositories
                         Email = registerDto.BusinessEmail ?? registerDto.Email,
                         Website = registerDto.Website,
                         GstIn = registerDto.GstIn,
+                        BusinessType = string.IsNullOrEmpty(registerDto.BusinessType) ? "General Retail Store" : registerDto.BusinessType,
+                        GstScheme = string.IsNullOrEmpty(registerDto.GstScheme) ? "Regular" : registerDto.GstScheme,
+                        RegisteredState = registerDto.RegisteredState ?? registerDto.BusinessState,
                         DefaultTaxRate = registerDto.DefaultTaxRate,
                         PricesIncludeTax = registerDto.PricesIncludeTax
                     };

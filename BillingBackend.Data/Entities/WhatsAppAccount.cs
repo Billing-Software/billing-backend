@@ -64,5 +64,6 @@ namespace BillingBackend.Data.Entities
         public Business Business { get; set; } = null!;
 
         public ICollection<MessageLog> MessageLogs { get; set; } = new List<MessageLog>();
+        public ICollection<WhatsAppTemplate> WhatsAppTemplates { get; set; } = new List<WhatsAppTemplate>();
     }
 }

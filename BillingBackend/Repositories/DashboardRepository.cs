@@ -38,9 +38,22 @@ namespace BillingBackend.Repositories
             };
 
             // 2. Recent Bills (Top 5)
-            data.RecentBills = await billsQuery
+            var recentBills = await billsQuery
                 .OrderByDescending(b => b.CreatedAt)
                 .Take(5)
+                .Select(b => new
+                {
+                    b.Id,
+                    b.BillNumber,
+                    b.TotalAmount,
+                    b.CreatedAt,
+                    b.Status,
+                    CustomerName = b.Customer.Name,
+                    StaffName = b.CreatedByStaff != null ? b.CreatedByStaff.Name : null
+                })
+                .ToListAsync();
+
+            data.RecentBills = recentBills
                 .Select(b => new DashboardRecentBillDto
                 {
                     Id = b.Id,
@@ -48,10 +61,10 @@ namespace BillingBackend.Repositories
                     TotalAmount = b.TotalAmount,
                     CreatedAt = b.CreatedAt,
                     Status = b.Status,
-                    CustomerName = b.Customer.Name,
-                    StaffName = b.CreatedByStaff != null ? b.CreatedByStaff.Name : "Owner"
+                    CustomerName = b.CustomerName,
+                    StaffName = b.StaffName ?? "Owner"
                 })
-                .ToListAsync();
+                .ToList();
 
             // 3. Top Selling Services (Top 5)
             data.TopServices = await _context.BillItems

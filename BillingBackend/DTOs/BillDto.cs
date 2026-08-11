@@ -16,6 +16,9 @@ namespace BillingBackend.DTOs
         [StringLength(200)]
         public string ServiceName { get; set; } = string.Empty;
 
+        [StringLength(50)]
+        public string ItemType { get; set; } = "Service";
+
         public decimal UnitPrice { get; set; }
         public int Quantity { get; set; } = 1;
         public decimal LineTotal { get; set; }

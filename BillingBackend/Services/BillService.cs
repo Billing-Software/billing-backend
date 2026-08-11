@@ -257,6 +257,7 @@ namespace BillingBackend.Services
                     BillId = bi.BillId,
                     ServiceId = bi.ServiceId,
                     ServiceName = bi.ServiceName,
+                    ItemType = bi.ItemType ?? "Service",
                     UnitPrice = bi.UnitPrice,
                     Quantity = bi.Quantity,
                     LineTotal = bi.LineTotal

@@ -45,6 +45,9 @@ namespace BillingBackend.DTOs
         [StringLength(50)]
         public string? GstIn { get; set; }
 
+        [StringLength(50)]
+        public string GstScheme { get; set; } = "Regular";
+
         public decimal DefaultTaxRate { get; set; } = 18.00m;
         public bool PricesIncludeTax { get; set; } = true;
         [StringLength(500)]

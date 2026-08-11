@@ -126,6 +126,248 @@ namespace BillingBackend.Services
         }
 
         /// <inheritdoc/>
+        public async Task<bool> SubscribeWabaToAppAsync(string wabaId, string accessToken)
+        {
+            try
+            {
+                var url = $"https://graph.facebook.com/{_graphApiVersion}/{wabaId}/subscribed_apps";
+                var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await _httpClient.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Successfully subscribed BillCom App to WABA: {WabaId}", wabaId);
+                    return true;
+                }
+
+                _logger.LogWarning("Failed to subscribe app to WABA {WabaId}: {StatusCode} {Content}",
+                    wabaId, response.StatusCode, content);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error subscribing app to WABA {WabaId}", wabaId);
+                return false;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<MetaPhoneNumberInfo>> GetWabaPhoneNumbersAsync(string wabaId, string accessToken)
+        {
+            var result = new List<MetaPhoneNumberInfo>();
+            try
+            {
+                var url = $"https://graph.facebook.com/{_graphApiVersion}/{wabaId}/phone_numbers";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await _httpClient.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Failed to fetch phone numbers for WABA {WabaId}: {StatusCode} {Content}",
+                        wabaId, response.StatusCode, content);
+                    return result;
+                }
+
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in dataArr.EnumerateArray())
+                    {
+                        result.Add(new MetaPhoneNumberInfo
+                        {
+                            Id = item.TryGetProperty("id", out var id) ? id.GetString() : null,
+                            DisplayPhoneNumber = item.TryGetProperty("display_phone_number", out var dpn) ? dpn.GetString() : null,
+                            VerifiedName = item.TryGetProperty("verified_name", out var vn) ? vn.GetString() : null,
+                            QualityRating = item.TryGetProperty("quality_rating", out var qr) ? qr.GetString() : null,
+                            Status = item.TryGetProperty("status", out var st) ? st.GetString() : null
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching phone numbers for WABA {WabaId}", wabaId);
+            }
+            return result;
+        }
+
+        /// <inheritdoc/>
+        public async Task<bool> RegisterPhoneNumberAsync(string phoneNumberId, string accessToken, string pin = "654321")
+        {
+            try
+            {
+                var url = $"https://graph.facebook.com/{_graphApiVersion}/{phoneNumberId}/register";
+                var payload = new
+                {
+                    messaging_product = "whatsapp",
+                    pin = pin
+                };
+                var json = JsonSerializer.Serialize(payload, _jsonOptions);
+                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await _httpClient.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Successfully registered phone number {PhoneNumberId}", phoneNumberId);
+                    return true;
+                }
+
+                _logger.LogWarning("Failed to register phone number {PhoneNumberId}: {StatusCode} {Content}",
+                    phoneNumberId, response.StatusCode, content);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering phone number {PhoneNumberId}", phoneNumberId);
+                return false;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<MetaTemplateCreateResponse> CreateWabaTemplateAsync(
+            string wabaId, string accessToken, string templateName, string category, string language, string bodyText)
+        {
+            try
+            {
+                var url = $"https://graph.facebook.com/{_graphApiVersion}/{wabaId}/message_templates";
+                var payload = new
+                {
+                    name = templateName.ToLowerInvariant(),
+                    language = language,
+                    category = category.ToUpperInvariant(),
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "BODY",
+                            text = bodyText,
+                            example = new
+                            {
+                                body_text_named_params = new object[]
+                                {
+                                    new { param_name = "1", example = "Ravi Kumar" },
+                                    new { param_name = "2", example = "INV-1025" },
+                                    new { param_name = "3", example = "₹1,250" },
+                                    new { param_name = "4", example = "Sai Laxmi Salon" },
+                                    new { param_name = "5", example = "https://billcom.in/i/sample" }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                var json = JsonSerializer.Serialize(payload, _jsonOptions);
+                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await _httpClient.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Meta template creation returned {StatusCode}: {Content}", response.StatusCode, content);
+                    
+                    // Parse error if already exists
+                    if (content.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new MetaTemplateCreateResponse
+                        {
+                            Status = "APPROVED",
+                            Error = null
+                        };
+                    }
+
+                    return new MetaTemplateCreateResponse { Error = $"Template creation failed: {response.StatusCode} {content}" };
+                }
+
+                using var doc = JsonDocument.Parse(content);
+                var root = doc.RootElement;
+
+                return new MetaTemplateCreateResponse
+                {
+                    Id = root.TryGetProperty("id", out var idProp) ? idProp.GetString() : null,
+                    Status = root.TryGetProperty("status", out var stProp) ? stProp.GetString() : "PENDING"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create WABA template via Meta API");
+                return new MetaTemplateCreateResponse { Error = ex.Message };
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<MetaTemplateInfo>> GetWabaTemplatesAsync(string wabaId, string accessToken)
+        {
+            var result = new List<MetaTemplateInfo>();
+            try
+            {
+                var url = $"https://graph.facebook.com/{_graphApiVersion}/{wabaId}/message_templates";
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                var response = await _httpClient.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Failed to fetch WABA templates: {StatusCode} {Content}", response.StatusCode, content);
+                    return result;
+                }
+
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in dataArr.EnumerateArray())
+                    {
+                        string? bodyText = null;
+                        if (item.TryGetProperty("components", out var components) && components.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var comp in components.EnumerateArray())
+                            {
+                                if (comp.TryGetProperty("type", out var t) && t.GetString() == "BODY")
+                                {
+                                    bodyText = comp.TryGetProperty("text", out var textProp) ? textProp.GetString() : null;
+                                    break;
+                                }
+                            }
+                        }
+
+                        result.Add(new MetaTemplateInfo
+                        {
+                            Id = item.TryGetProperty("id", out var id) ? id.GetString() : null,
+                            Name = item.TryGetProperty("name", out var name) ? name.GetString() : null,
+                            Category = item.TryGetProperty("category", out var cat) ? cat.GetString() : null,
+                            Language = item.TryGetProperty("language", out var lang) ? lang.GetString() : null,
+                            Status = item.TryGetProperty("status", out var st) ? st.GetString() : null,
+                            BodyText = bodyText
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching WABA templates for WABA {WabaId}", wabaId);
+            }
+            return result;
+        }
+
+        /// <inheritdoc/>
         public async Task<MetaSendMessageResponse> SendTextMessageAsync(
             string phoneNumberId, string accessToken, string to, string text)
         {
@@ -166,7 +408,7 @@ namespace BillingBackend.Services
 
         /// <inheritdoc/>
         public async Task<MetaSendMessageResponse> SendTemplateMessageAsync(
-            string phoneNumberId, string accessToken, string to, string templateName, Dictionary<string, string>? parameters)
+            string phoneNumberId, string accessToken, string to, string templateName, Dictionary<string, string>? parameters, string languageCode = "en_US")
         {
             var url = $"https://graph.facebook.com/{_graphApiVersion}/{phoneNumberId}/messages";
 
@@ -185,7 +427,7 @@ namespace BillingBackend.Services
                 template = new
                 {
                     name = templateName,
-                    language = new { code = "en" },
+                    language = new { code = string.IsNullOrEmpty(languageCode) ? "en_US" : languageCode },
                     components = components.Count > 0 ? components : null
                 }
             };

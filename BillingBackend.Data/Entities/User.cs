@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace BillingBackend.Data.Entities
 {
     public class User
@@ -17,9 +19,11 @@ namespace BillingBackend.Data.Entities
         public string Email { get; set; } = string.Empty;
 
         [Required]
+        [Column(TypeName = "RAW(2000)")]
         public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
 
         [Required]
+        [Column(TypeName = "RAW(2000)")]
         public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
 
         [Required]

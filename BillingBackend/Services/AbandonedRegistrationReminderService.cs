@@ -77,7 +77,7 @@ namespace BillingBackend.Services
                 {
                     try
                     {
-                        var recoveryLink = $"{marketingSiteUrl.TrimEnd('/')}/checkout/resume?token={pending.Token}";
+                        var recoveryLink = $"{marketingSiteUrl.TrimEnd('/')}/#/checkout/resume?token={pending.Token}";
                         
                         var emailBody = $@"
                             <h2>Complete your SmartBill Pro Setup!</h2>

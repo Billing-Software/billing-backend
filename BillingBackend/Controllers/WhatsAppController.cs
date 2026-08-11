@@ -159,5 +159,68 @@ namespace BillingBackend.Controllers
                 return StatusCode(500, new { message = "Error retrieving WhatsApp message logs.", error = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Get all WhatsApp message templates managed for this business WABA.
+        /// </summary>
+        [HttpGet("templates")]
+        public async Task<ActionResult<IEnumerable<WhatsAppTemplateDto>>> GetTemplates()
+        {
+            try
+            {
+                var templates = await _whatsAppService.GetTemplatesAsync(CurrentBusinessId);
+                return Ok(templates);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving WhatsApp templates.", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Force sync/provision default BillCom invoice template on the customer WABA.
+        /// </summary>
+        [HttpPost("templates/sync")]
+        public async Task<ActionResult<WhatsAppTemplateDto>> SyncTemplates()
+        {
+            try
+            {
+                var result = await _whatsAppService.EnsureDefaultInvoiceTemplateAsync(CurrentBusinessId);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error provisioning WhatsApp template.", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Send an invoice using the default approved WhatsApp invoice template.
+        /// </summary>
+        [HttpPost("send-invoice-template")]
+        public async Task<ActionResult<MessageLogDto>> SendInvoiceTemplate(SendInvoiceTemplateRequestDto dto)
+        {
+            try
+            {
+                var result = await _whatsAppService.SendInvoiceTemplateAsync(CurrentBusinessId, dto);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error sending WhatsApp invoice template message.", error = ex.Message });
+            }
+        }
     }
 }

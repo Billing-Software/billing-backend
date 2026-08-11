@@ -130,6 +130,10 @@ namespace BillingBackend.Repositories
                     foreach (var item in items)
                     {
                         item.Bill = bill;
+                        if (string.IsNullOrEmpty(item.ItemType))
+                        {
+                            item.ItemType = "Service";
+                        }
                         bill.Items.Add(item);
                     }
 

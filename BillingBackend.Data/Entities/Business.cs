@@ -50,6 +50,20 @@ namespace BillingBackend.Data.Entities
         [MaxLength(50)]
         public string? GstIn { get; set; }
 
+        [MaxLength(100)]
+        public string BusinessType { get; set; } = "General Retail Store";
+
+        [MaxLength(50)]
+        public string SellingModel { get; set; } = "GOODS_AND_SERVICES"; // GOODS_ONLY, SERVICES_ONLY, GOODS_AND_SERVICES
+
+        [MaxLength(50)]
+        public string GstScheme { get; set; } = "Regular"; // Regular, Composition, None
+
+        [MaxLength(100)]
+        public string? RegisteredState { get; set; }
+
+        public string? CustomTerminologyJson { get; set; }
+
         [Column(TypeName = "decimal(5,2)")]
         public decimal DefaultTaxRate { get; set; } = 18.00m;
 

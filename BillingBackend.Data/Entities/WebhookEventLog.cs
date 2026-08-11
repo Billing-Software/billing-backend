@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace BillingBackend.Data.Entities
 {
     /// <summary>
@@ -36,6 +38,7 @@ namespace BillingBackend.Data.Entities
         /// <summary>
         /// Full raw JSON payload of the webhook for forensic analysis and replay.
         /// </summary>
+        [Column(TypeName = "NCLOB")]
         public string? RawPayload { get; set; }
 
         /// <summary>
