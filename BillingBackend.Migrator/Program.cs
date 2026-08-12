@@ -13,7 +13,7 @@ namespace BillingBackend.Migrator
         static void Main(string[] args)
         {
             Console.WriteLine("==================================================");
-            Console.WriteLine("SmartBilling Local Oracle DB Fresh Setup");
+            Console.WriteLine("SmartBilling Local Oracle DB Fresh Setup & Purge");
             Console.WriteLine("Target: SYSTEM / admin123 @ localhost:1521/XEPDB1");
             Console.WriteLine("==================================================");
 
@@ -25,19 +25,23 @@ namespace BillingBackend.Migrator
 
             var serviceProvider = services.BuildServiceProvider();
 
+            bool dropOnly = args.Contains("--drop-only") || args.Contains("drop");
+
             using (var scope = serviceProvider.CreateScope())
             {
                 var context = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
                 try
                 {
-                    Console.WriteLine("\n[1/3] Purging old Oracle tables and sequences...");
+                    Console.WriteLine("\n[1/3] Purging all Oracle tables, views, sequences, synonyms & recyclebin...");
                     context.Database.ExecuteSqlRaw(@"
                         BEGIN
-                            FOR t IN (SELECT table_name FROM user_tables) LOOP
-                                BEGIN
-                                    EXECUTE IMMEDIATE 'DROP TABLE ""' || t.table_name || '"" CASCADE CONSTRAINTS';
-                                EXCEPTION WHEN OTHERS THEN NULL;
-                                END;
+                            FOR pass IN 1..5 LOOP
+                                FOR t IN (SELECT table_name FROM user_tables) LOOP
+                                    BEGIN
+                                        EXECUTE IMMEDIATE 'DROP TABLE ""' || t.table_name || '"" CASCADE CONSTRAINTS PURGE';
+                                    EXCEPTION WHEN OTHERS THEN NULL;
+                                    END;
+                                END LOOP;
                             END LOOP;
                             FOR s IN (SELECT sequence_name FROM user_sequences) LOOP
                                 BEGIN
@@ -45,10 +49,34 @@ namespace BillingBackend.Migrator
                                 EXCEPTION WHEN OTHERS THEN NULL;
                                 END;
                             END LOOP;
+                            FOR v IN (SELECT view_name FROM user_views) LOOP
+                                BEGIN
+                                    EXECUTE IMMEDIATE 'DROP VIEW ""' || v.view_name || '"" CASCADE CONSTRAINTS';
+                                EXCEPTION WHEN OTHERS THEN NULL;
+                                END;
+                            END LOOP;
+                            FOR syn IN (SELECT synonym_name FROM user_synonyms) LOOP
+                                BEGIN
+                                    EXECUTE IMMEDIATE 'DROP SYNONYM ' || syn.synonym_name;
+                                EXCEPTION WHEN OTHERS THEN NULL;
+                                END;
+                            END LOOP;
+                            BEGIN
+                                EXECUTE IMMEDIATE 'PURGE RECYCLEBIN';
+                            EXCEPTION WHEN OTHERS THEN NULL;
+                            END;
                         END;");
-                    Console.WriteLine("✓ Purged old Oracle tables cleanly.");
+                    Console.WriteLine("✓ Purged all Oracle tables, sequences, views, synonyms, and recyclebin cleanly.");
 
-                    Console.WriteLine("\n[2/3] Creating fresh Oracle Database schema & tables...");
+                    if (dropOnly)
+                    {
+                        Console.WriteLine("\n==================================================");
+                        Console.WriteLine("SUCCESS: All Oracle database tables completely purged!");
+                        Console.WriteLine("==================================================");
+                        return;
+                    }
+
+                    Console.WriteLine("\n[2/3] Creating 26 fresh Oracle Database schema tables...");
                     string[] createTableSqls = new[]
                     {
                         @"CREATE TABLE ""Users"" (
@@ -85,30 +113,30 @@ namespace BillingBackend.Migrator
                             ""City"" VARCHAR2(100),
                             ""State"" VARCHAR2(100),
                             ""PostalCode"" VARCHAR2(20),
-                            ""Country"" VARCHAR2(100) DEFAULT 'India',
+                            ""Country"" VARCHAR2(100) DEFAULT 'India' NOT NULL,
                             ""Phone"" VARCHAR2(20),
                             ""Email"" VARCHAR2(256),
                             ""Website"" VARCHAR2(500),
                             ""GstIn"" VARCHAR2(50),
-                            ""SellingModel"" VARCHAR2(50) DEFAULT 'GOODS_AND_SERVICES',
-                            ""BusinessType"" VARCHAR2(100) DEFAULT 'General Retail Store',
-                            ""GstScheme"" VARCHAR2(50) DEFAULT 'Regular',
+                            ""BusinessType"" VARCHAR2(100) DEFAULT 'General Retail Store' NOT NULL,
+                            ""SellingModel"" VARCHAR2(50) DEFAULT 'GOODS_AND_SERVICES' NOT NULL,
+                            ""GstScheme"" VARCHAR2(50) DEFAULT 'Regular' NOT NULL,
                             ""RegisteredState"" VARCHAR2(100),
                             ""CustomTerminologyJson"" NCLOB,
                             ""DefaultTaxRate"" NUMBER(5,2) DEFAULT 18.00 NOT NULL,
                             ""PricesIncludeTax"" NUMBER(1) DEFAULT 1 NOT NULL,
-                            ""ActivePlanId"" NUMBER(10) REFERENCES ""SubscriptionPlans""(""Id"") ON DELETE SET NULL,
-                            ""SubscriptionStatus"" VARCHAR2(50) DEFAULT 'Trial',
-                            ""SubscriptionExpiresAt"" TIMESTAMP,
-                            ""RazorpayCustomerId"" VARCHAR2(100),
-                            ""RazorpaySubscriptionId"" VARCHAR2(100),
-                            ""AllowedBranches"" NUMBER(10) DEFAULT 1 NOT NULL,
-                            ""AllowedStaff"" NUMBER(10) DEFAULT 2 NOT NULL,
                             ""ReceiptHeader"" VARCHAR2(500),
                             ""ReceiptFooter"" VARCHAR2(500),
                             ""ShowLogoOnReceipt"" NUMBER(1) DEFAULT 1 NOT NULL,
-                            ""ReceiptTemplateType"" VARCHAR2(50) DEFAULT 'Standard',
+                            ""ReceiptTemplateType"" VARCHAR2(50) DEFAULT 'Thermal80mm' NOT NULL,
                             ""IsSuspended"" NUMBER(1) DEFAULT 0 NOT NULL,
+                            ""ActivePlanId"" NUMBER(10) DEFAULT 1 NOT NULL REFERENCES ""SubscriptionPlans""(""Id"") ON DELETE SET NULL,
+                            ""AllowedBranches"" NUMBER(10) DEFAULT 1 NOT NULL,
+                            ""AllowedStaff"" NUMBER(10) DEFAULT 2 NOT NULL,
+                            ""RazorpayCustomerId"" VARCHAR2(100),
+                            ""RazorpaySubscriptionId"" VARCHAR2(100),
+                            ""SubscriptionStatus"" VARCHAR2(50) DEFAULT 'Inactive' NOT NULL,
+                            ""SubscriptionExpiresAt"" TIMESTAMP,
                             ""CreatedAt"" TIMESTAMP NOT NULL,
                             ""UpdatedAt"" TIMESTAMP
                         )",
@@ -167,8 +195,8 @@ namespace BillingBackend.Migrator
                             ""SKU"" VARCHAR2(50) NOT NULL,
                             ""Category"" VARCHAR2(100) NOT NULL,
                             ""CurrentStock"" NUMBER(10) DEFAULT 0 NOT NULL,
+                            ""Unit"" VARCHAR2(50) DEFAULT 'pcs' NOT NULL,
                             ""ReorderLevel"" NUMBER(10) DEFAULT 5 NOT NULL,
-                            ""Unit"" VARCHAR2(20) DEFAULT 'pcs' NOT NULL,
                             ""ImageUrl"" VARCHAR2(500),
                             ""CreatedAt"" TIMESTAMP NOT NULL,
                             ""UpdatedAt"" TIMESTAMP
@@ -185,8 +213,6 @@ namespace BillingBackend.Migrator
                             ""Role"" VARCHAR2(50) DEFAULT 'Staff' NOT NULL,
                             ""TotalBills"" NUMBER(10) DEFAULT 0 NOT NULL,
                             ""RevenueGenerated"" NUMBER(18,2) DEFAULT 0 NOT NULL,
-                            ""PasscodeHash"" RAW(2000),
-                            ""PasscodeSalt"" RAW(2000),
                             ""Status"" VARCHAR2(20) DEFAULT 'Active' NOT NULL,
                             ""CreatedAt"" TIMESTAMP NOT NULL,
                             ""UpdatedAt"" TIMESTAMP
@@ -195,17 +221,17 @@ namespace BillingBackend.Migrator
                         @"CREATE TABLE ""Bills"" (
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""BusinessId"" NUMBER(10) NOT NULL REFERENCES ""Businesses""(""Id"") ON DELETE CASCADE,
-                            ""BranchId"" NUMBER(10) REFERENCES ""Branches""(""Id""),
-                            ""CustomerId"" NUMBER(10) REFERENCES ""Customers""(""Id""),
-                            ""CreatedByStaffId"" NUMBER(10) REFERENCES ""StaffMembers""(""Id""),
+                            ""BranchId"" NUMBER(10) NOT NULL REFERENCES ""Branches""(""Id""),
+                            ""CustomerId"" NUMBER(10) NOT NULL REFERENCES ""Customers""(""Id""),
+                            ""CreatedByStaffId"" NUMBER(10) REFERENCES ""StaffMembers""(""Id"") ON DELETE SET NULL,
                             ""BillNumber"" VARCHAR2(50) NOT NULL,
                             ""Subtotal"" NUMBER(18,2) NOT NULL,
                             ""DiscountCode"" VARCHAR2(50),
                             ""DiscountAmount"" NUMBER(18,2) DEFAULT 0 NOT NULL,
                             ""TaxAmount"" NUMBER(18,2) DEFAULT 0 NOT NULL,
                             ""TotalAmount"" NUMBER(18,2) NOT NULL,
-                            ""PaymentMethod"" VARCHAR2(50) NOT NULL,
-                            ""Status"" VARCHAR2(20) DEFAULT 'Completed' NOT NULL,
+                            ""PaymentMethod"" VARCHAR2(20) DEFAULT 'Cash' NOT NULL,
+                            ""Status"" VARCHAR2(20) DEFAULT 'Pending' NOT NULL,
                             ""InvoicePdfUrl"" VARCHAR2(500),
                             ""IdempotencyKey"" VARCHAR2(100),
                             ""PaymentReference"" VARCHAR2(200),
@@ -217,31 +243,32 @@ namespace BillingBackend.Migrator
                         @"CREATE TABLE ""BillItems"" (
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""BillId"" NUMBER(10) NOT NULL REFERENCES ""Bills""(""Id"") ON DELETE CASCADE,
-                            ""ServiceId"" NUMBER(10) DEFAULT 0 NOT NULL,
+                            ""ServiceId"" NUMBER(10) NOT NULL REFERENCES ""Services""(""Id""),
                             ""ServiceName"" VARCHAR2(200) NOT NULL,
-                            ""Quantity"" NUMBER(10) NOT NULL,
                             ""UnitPrice"" NUMBER(18,2) NOT NULL,
+                            ""Quantity"" NUMBER(10) DEFAULT 1 NOT NULL,
+                            ""ItemType"" VARCHAR2(50) DEFAULT 'Service' NOT NULL,
                             ""LineTotal"" NUMBER(18,2) NOT NULL,
                             ""HSNCode"" VARCHAR2(20),
                             ""SACCode"" VARCHAR2(20),
                             ""TaxableValue"" NUMBER(18,2) DEFAULT 0 NOT NULL,
-                            ""TaxRate"" NUMBER(18,2) DEFAULT 0 NOT NULL,
-                            ""CGSTRate"" NUMBER(18,2) DEFAULT 0 NOT NULL,
+                            ""TaxRate"" NUMBER(5,2) DEFAULT 18.00 NOT NULL,
+                            ""CGSTRate"" NUMBER(5,2) DEFAULT 9.00 NOT NULL,
                             ""CGSTAmount"" NUMBER(18,2) DEFAULT 0 NOT NULL,
-                            ""SGSTRate"" NUMBER(18,2) DEFAULT 0 NOT NULL,
+                            ""SGSTRate"" NUMBER(5,2) DEFAULT 9.00 NOT NULL,
                             ""SGSTAmount"" NUMBER(18,2) DEFAULT 0 NOT NULL,
-                            ""IGSTRate"" NUMBER(18,2) DEFAULT 0 NOT NULL,
+                            ""IGSTRate"" NUMBER(5,2) DEFAULT 0 NOT NULL,
                             ""IGSTAmount"" NUMBER(18,2) DEFAULT 0 NOT NULL,
-                            ""CessRate"" NUMBER(18,2) DEFAULT 0 NOT NULL,
+                            ""CessRate"" NUMBER(5,2) DEFAULT 0 NOT NULL,
                             ""CessAmount"" NUMBER(18,2) DEFAULT 0 NOT NULL
                         )",
 
                         @"CREATE TABLE ""Expenses"" (
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""BusinessId"" NUMBER(10) NOT NULL REFERENCES ""Businesses""(""Id"") ON DELETE CASCADE,
-                            ""Category"" VARCHAR2(100) NOT NULL,
+                            ""Description"" VARCHAR2(500) NOT NULL,
                             ""Amount"" NUMBER(18,2) NOT NULL,
-                            ""Description"" VARCHAR2(500),
+                            ""Category"" VARCHAR2(100) NOT NULL,
                             ""ExpenseDate"" TIMESTAMP NOT NULL,
                             ""CreatedAt"" TIMESTAMP NOT NULL
                         )",
@@ -265,7 +292,7 @@ namespace BillingBackend.Migrator
                             ""InventoryItemId"" NUMBER(10) REFERENCES ""InventoryItems""(""Id""),
                             ""ItemName"" VARCHAR2(200) NOT NULL,
                             ""UnitPrice"" NUMBER(18,2) NOT NULL,
-                            ""Quantity"" NUMBER(10) NOT NULL,
+                            ""Quantity"" NUMBER(10) DEFAULT 1 NOT NULL,
                             ""LineTotal"" NUMBER(18,2) NOT NULL
                         )",
 
@@ -283,14 +310,26 @@ namespace BillingBackend.Migrator
                             ""DisconnectedAt"" TIMESTAMP
                         )",
 
+                        @"CREATE TABLE ""WhatsAppTemplates"" (
+                            ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
+                            ""WhatsAppAccountId"" NUMBER(10) NOT NULL REFERENCES ""WhatsAppAccounts""(""Id"") ON DELETE CASCADE,
+                            ""TemplateName"" VARCHAR2(100) NOT NULL,
+                            ""Language"" VARCHAR2(20) DEFAULT 'en' NOT NULL,
+                            ""Category"" VARCHAR2(30) DEFAULT 'UTILITY' NOT NULL,
+                            ""BodyText"" VARCHAR2(2000),
+                            ""Status"" VARCHAR2(30) DEFAULT 'PENDING' NOT NULL,
+                            ""CreatedAt"" TIMESTAMP NOT NULL,
+                            ""UpdatedAt"" TIMESTAMP
+                        )",
+
                         @"CREATE TABLE ""MessageLogs"" (
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""WhatsAppAccountId"" NUMBER(10) NOT NULL REFERENCES ""WhatsAppAccounts""(""Id"") ON DELETE CASCADE,
                             ""BillId"" NUMBER(10) REFERENCES ""Bills""(""Id"") ON DELETE SET NULL,
                             ""RecipientPhone"" VARCHAR2(20) NOT NULL,
-                            ""MessageType"" VARCHAR2(20) NOT NULL,
+                            ""MessageType"" VARCHAR2(20) DEFAULT 'text' NOT NULL,
                             ""MetaMessageId"" VARCHAR2(200),
-                            ""Status"" VARCHAR2(20) NOT NULL,
+                            ""Status"" VARCHAR2(20) DEFAULT 'Queued' NOT NULL,
                             ""SentAt"" TIMESTAMP NOT NULL,
                             ""DeliveredAt"" TIMESTAMP,
                             ""ReadAt"" TIMESTAMP,
@@ -301,7 +340,7 @@ namespace BillingBackend.Migrator
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""UserId"" NUMBER(10) NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
                             ""Token"" VARCHAR2(500) NOT NULL UNIQUE,
-                            ""ExpiresAt"" TIMESTAMP NOT NULL,
+                            ""ExpiryTime"" TIMESTAMP NOT NULL,
                             ""IsRevoked"" NUMBER(1) DEFAULT 0 NOT NULL,
                             ""CreatedAt"" TIMESTAMP NOT NULL
                         )",
@@ -317,7 +356,7 @@ namespace BillingBackend.Migrator
                             ""Phone"" VARCHAR2(20),
                             ""GstIn"" VARCHAR2(50),
                             ""Address"" VARCHAR2(500),
-                            ""SelectedPlanId"" NUMBER(10) NOT NULL,
+                            ""SelectedPlanId"" NUMBER(10) DEFAULT 1 NOT NULL,
                             ""RazorpayCustomerId"" VARCHAR2(100),
                             ""RazorpaySubscriptionId"" VARCHAR2(100),
                             ""Status"" VARCHAR2(50) DEFAULT 'PendingPayment' NOT NULL,
@@ -331,14 +370,19 @@ namespace BillingBackend.Migrator
                         @"CREATE TABLE ""PaymentTransactions"" (
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""BusinessId"" NUMBER(10) REFERENCES ""Businesses""(""Id""),
-                            ""RazorpayPaymentId"" VARCHAR2(100) NOT NULL UNIQUE,
+                            ""RazorpayPaymentId"" VARCHAR2(100),
                             ""RazorpayOrderId"" VARCHAR2(100),
-                            ""RazorpaySignature"" VARCHAR2(500),
+                            ""RazorpaySubscriptionId"" VARCHAR2(100),
                             ""Amount"" NUMBER(18,2) NOT NULL,
-                            ""Currency"" VARCHAR2(10) DEFAULT 'INR' NOT NULL,
                             ""Status"" VARCHAR2(50) NOT NULL,
+                            ""PaymentMethod"" VARCHAR2(50),
+                            ""RawWebhookPayload"" NCLOB,
                             ""FailureReason"" VARCHAR2(500),
-                            ""CreatedAt"" TIMESTAMP NOT NULL
+                            ""RetryCount"" NUMBER(10) DEFAULT 0 NOT NULL,
+                            ""WebhookEventId"" NUMBER(10),
+                            ""CorrelationId"" VARCHAR2(100),
+                            ""CreatedAt"" TIMESTAMP NOT NULL,
+                            ""UpdatedAt"" TIMESTAMP
                         )",
 
                         @"CREATE TABLE ""AuditLogs"" (
@@ -372,16 +416,16 @@ namespace BillingBackend.Migrator
 
                         @"CREATE TABLE ""TaxCategories"" (
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
-                            ""BusinessId"" NUMBER(10),
+                            ""BusinessId"" NUMBER(10) REFERENCES ""Businesses""(""Id"") ON DELETE CASCADE,
                             ""Name"" VARCHAR2(100) NOT NULL,
                             ""TaxType"" VARCHAR2(20) DEFAULT 'Goods' NOT NULL,
                             ""HSNCode"" VARCHAR2(20),
                             ""SACCode"" VARCHAR2(20),
-                            ""GSTPercentage"" NUMBER(18,2) NOT NULL,
-                            ""CGSTPercentage"" NUMBER(18,2) NOT NULL,
-                            ""SGSTPercentage"" NUMBER(18,2) NOT NULL,
-                            ""IGSTPercentage"" NUMBER(18,2) NOT NULL,
-                            ""CessPercentage"" NUMBER(18,2) NOT NULL,
+                            ""GSTPercentage"" NUMBER(5,2) DEFAULT 18.00 NOT NULL,
+                            ""CGSTPercentage"" NUMBER(5,2) DEFAULT 9.00 NOT NULL,
+                            ""SGSTPercentage"" NUMBER(5,2) DEFAULT 9.00 NOT NULL,
+                            ""IGSTPercentage"" NUMBER(5,2) DEFAULT 18.00 NOT NULL,
+                            ""CessPercentage"" NUMBER(5,2) DEFAULT 0.00 NOT NULL,
                             ""IsActive"" NUMBER(1) DEFAULT 1 NOT NULL,
                             ""CreatedAt"" TIMESTAMP NOT NULL
                         )",
@@ -390,9 +434,9 @@ namespace BillingBackend.Migrator
                             ""Id"" NUMBER(10) GENERATED BY DEFAULT ON NULL AS IDENTITY PRIMARY KEY,
                             ""Code"" VARCHAR2(20) NOT NULL,
                             ""Description"" VARCHAR2(500) NOT NULL,
-                            ""SearchTerms"" VARCHAR2(500) NOT NULL,
-                            ""UQC"" VARCHAR2(20) NOT NULL,
-                            ""DefaultGSTPercentage"" NUMBER(18,2) NOT NULL,
+                            ""SearchTerms"" VARCHAR2(500),
+                            ""UQC"" VARCHAR2(20) DEFAULT 'PCS' NOT NULL,
+                            ""DefaultGSTPercentage"" NUMBER(5,2) DEFAULT 18.00 NOT NULL,
                             ""IsActive"" NUMBER(1) DEFAULT 1 NOT NULL
                         )",
 
@@ -401,7 +445,7 @@ namespace BillingBackend.Migrator
                             ""Code"" VARCHAR2(20) NOT NULL,
                             ""Description"" VARCHAR2(500) NOT NULL,
                             ""SearchTerms"" VARCHAR2(500),
-                            ""DefaultGSTPercentage"" NUMBER(18,2) NOT NULL,
+                            ""DefaultGSTPercentage"" NUMBER(5,2) DEFAULT 18.00 NOT NULL,
                             ""IsActive"" NUMBER(1) DEFAULT 1 NOT NULL
                         )",
 
@@ -424,9 +468,23 @@ namespace BillingBackend.Migrator
                     {
                         context.Database.ExecuteSqlRaw(sql);
                     }
-                    Console.WriteLine("✓ 25 Oracle tables created cleanly.");
+                    Console.WriteLine("✓ 26 Oracle tables created cleanly matching all Entity models.");
 
-                    Console.WriteLine("\n[3/3] Seeding default Subscription Plans...");
+                    // Create uppercase synonyms so unquoted SQL queries work in SQL Developer
+                    context.Database.ExecuteSqlRaw(@"
+                        BEGIN
+                            FOR t IN (SELECT table_name FROM user_tables) LOOP
+                                IF UPPER(t.table_name) != t.table_name THEN
+                                    BEGIN
+                                        EXECUTE IMMEDIATE 'CREATE OR REPLACE SYNONYM ' || UPPER(t.table_name) || ' FOR ' || CHR(34) || t.table_name || CHR(34);
+                                    EXCEPTION WHEN OTHERS THEN NULL;
+                                    END;
+                                END IF;
+                            END LOOP;
+                        END;");
+                    Console.WriteLine("✓ Created Oracle uppercase synonyms for unquoted SQL Developer queries.");
+
+                    Console.WriteLine("\n[3/3] Seeding baseline Master Data & Subscription Plans...");
                     context.Database.ExecuteSqlRaw(@"
                         INSERT INTO ""SubscriptionPlans"" (""Name"", ""RazorpayPlanIdMonthly"", ""RazorpayPlanIdYearly"", ""MonthlyPrice"", ""YearlyPrice"", ""MaxBranches"", ""MaxStaff"", ""IsActive"") 
                         VALUES ('Starter Plan', 'plan_starter_m', 'plan_starter_y', 499, 4990, 1, 2, 1)");
@@ -439,10 +497,73 @@ namespace BillingBackend.Migrator
                         INSERT INTO ""SubscriptionPlans"" (""Name"", ""RazorpayPlanIdMonthly"", ""RazorpayPlanIdYearly"", ""MonthlyPrice"", ""YearlyPrice"", ""MaxBranches"", ""MaxStaff"", ""IsActive"") 
                         VALUES ('Enterprise Plan', 'plan_enterprise_m', 'plan_enterprise_y', 4999, 49990, 99, 999, 1)");
 
-                    Console.WriteLine("✓ Default Subscription Plans seeded successfully.");
+                    Console.WriteLine("✓ Subscription Plans seeded successfully.");
+
+                    // Seed Tax Categories
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('Standard Goods (18%)', 'Goods', '9999', NULL, 18.00, 9.00, 9.00, 18.00, 0.00, 1, CURRENT_TIMESTAMP)");
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('Reduced Goods (5%)', 'Goods', '1001', NULL, 5.00, 2.50, 2.50, 5.00, 0.00, 1, CURRENT_TIMESTAMP)");
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('Essential / Exempt (0%)', 'Goods', '0000', NULL, 0.00, 0.00, 0.00, 0.00, 0.00, 1, CURRENT_TIMESTAMP)");
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('Luxury Goods (28% + Cess)', 'Goods', '8703', NULL, 28.00, 14.00, 14.00, 28.00, 12.00, 1, CURRENT_TIMESTAMP)");
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('Restaurant Service (5%)', 'Services', NULL, '996331', 5.00, 2.50, 2.50, 5.00, 0.00, 1, CURRENT_TIMESTAMP)");
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('IT & Professional Services (18%)', 'Services', NULL, '998313', 18.00, 9.00, 9.00, 18.00, 0.00, 1, CURRENT_TIMESTAMP)");
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""TaxCategories"" (""Name"", ""TaxType"", ""HSNCode"", ""SACCode"", ""GSTPercentage"", ""CGSTPercentage"", ""SGSTPercentage"", ""IGSTPercentage"", ""CessPercentage"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('Personal Care / Salon (18%)', 'Services', NULL, '999721', 18.00, 9.00, 9.00, 18.00, 0.00, 1, CURRENT_TIMESTAMP)");
+
+                    Console.WriteLine("✓ Tax Categories seeded successfully.");
+
+                    // Seed Business Type Masters
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""BusinessTypeMasters"" (""Code"", ""Name"", ""Category"", ""IconName"", ""SellingModel"", ""AliasesJson"", ""DefaultFeaturesJson"", ""DefaultTerminologyJson"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('restaurant', 'Restaurant', 'Food & Hospitality', 'Utensils', 'GOODS_AND_SERVICES', '[""hotel"",""dine in"",""eatery"",""food court"",""dhaba""]', '{{""products"":true,""services"":false,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}}', '{{""product"":{{""singular"":""Menu Item"",""plural"":""Menu Items""}},""service"":{{""singular"":""Dining Service"",""plural"":""Dining Services""}},""customer"":{{""singular"":""Customer"",""plural"":""Customers""}},""invoice"":{{""singular"":""Order / Bill"",""plural"":""Orders / Bills""}},""inventory"":{{""singular"":""Ingredient Stock"",""plural"":""Ingredient Stock""}},""purchase"":{{""singular"":""Ingredient Purchase"",""plural"":""Ingredient Purchases""}},""supplier"":{{""singular"":""Vendor / Supplier"",""plural"":""Vendors & Suppliers""}},""staff"":{{""singular"":""Staff / Waiter"",""plural"":""Staff & Waiters""}}}}', 1, CURRENT_TIMESTAMP)");
+
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""BusinessTypeMasters"" (""Code"", ""Name"", ""Category"", ""IconName"", ""SellingModel"", ""AliasesJson"", ""DefaultFeaturesJson"", ""DefaultTerminologyJson"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('tiffin_center', 'Tiffin Center / Mess', 'Food & Hospitality', 'Soup', 'GOODS_ONLY', '[""mess"",""tiffin"",""canteen"",""fast food"",""food stall"",""tiffin service""]', '{{""products"":true,""services"":false,""inventory"":false,""appointments"":false,""customers"":true,""staff"":false,""khata"":true,""purchases"":true,""expenses"":true}}', '{{""product"":{{""singular"":""Food Item"",""plural"":""Food Items""}},""customer"":{{""singular"":""Customer"",""plural"":""Customers""}},""invoice"":{{""singular"":""Bill"",""plural"":""Bills""}}}}', 1, CURRENT_TIMESTAMP)");
+
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""BusinessTypeMasters"" (""Code"", ""Name"", ""Category"", ""IconName"", ""SellingModel"", ""AliasesJson"", ""DefaultFeaturesJson"", ""DefaultTerminologyJson"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('grocery_kirana', 'Grocery / Kirana Store', 'Retail', 'ShoppingCart', 'GOODS_ONLY', '[""kirana"",""grocery"",""provision store"",""super market"",""general store"",""departmental store""]', '{{""products"":true,""services"":false,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}}', '{{""product"":{{""singular"":""Product"",""plural"":""Products""}},""customer"":{{""singular"":""Customer"",""plural"":""Customers""}},""invoice"":{{""singular"":""Bill"",""plural"":""Bills""}},""inventory"":{{""singular"":""Stock"",""plural"":""Stock & Inventory""}}}}', 1, CURRENT_TIMESTAMP)");
+
+                    context.Database.ExecuteSqlRaw(@"
+                        INSERT INTO ""BusinessTypeMasters"" (""Code"", ""Name"", ""Category"", ""IconName"", ""SellingModel"", ""AliasesJson"", ""DefaultFeaturesJson"", ""DefaultTerminologyJson"", ""IsActive"", ""CreatedAt"")
+                        VALUES ('general_retail', 'General Retail Store', 'Retail', 'Store', 'GOODS_AND_SERVICES', '[""general"",""other"",""retail"",""shop""]', '{{""products"":true,""services"":true,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}}', '{{""product"":{{""singular"":""Product"",""plural"":""Products""}},""service"":{{""singular"":""Service"",""plural"":""Services""}},""customer"":{{""singular"":""Customer"",""plural"":""Customers""}},""invoice"":{{""singular"":""Bill / Invoice"",""plural"":""Bills & Invoices""}}}}', 1, CURRENT_TIMESTAMP)");
+
+                    Console.WriteLine("✓ Business Type Masters seeded successfully.");
+
+                    Console.WriteLine("\n[4/4] Verification: Checking existing tables in Oracle DB...");
+                    using (var cmd = context.Database.GetDbConnection().CreateCommand())
+                    {
+                        if (cmd.Connection.State != System.Data.ConnectionState.Open)
+                            cmd.Connection.Open();
+                        cmd.CommandText = "SELECT table_name FROM user_tables ORDER BY table_name";
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            int count = 0;
+                            Console.WriteLine("Found the following tables in Oracle Database:");
+                            while (reader.Read())
+                            {
+                                count++;
+                                Console.WriteLine($"  {count}. {reader.GetString(0)}");
+                            }
+                            Console.WriteLine($"Total Tables Count in DB: {count}");
+                        }
+                    }
 
                     Console.WriteLine("\n==================================================");
-                    Console.WriteLine("SUCCESS: Oracle Database reset & creation complete!");
+                    Console.WriteLine("SUCCESS: Oracle Database schema & migration updated!");
                     Console.WriteLine("==================================================");
                 }
                 catch (Exception ex)

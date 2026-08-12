@@ -43,6 +43,8 @@ namespace BillingBackend.Services
         {
             try
             {
+                _logger.LogInformation("[MetaApiClient] Exchanging OAuth code with Graph API {Version}... AppId: {AppId}", _graphApiVersion, _appId);
+
                 var url = $"https://graph.facebook.com/{_graphApiVersion}/oauth/access_token" +
                           $"?client_id={_appId}" +
                           $"&client_secret={_appSecret}" +
@@ -53,23 +55,28 @@ namespace BillingBackend.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logger.LogError("Meta token exchange failed: {StatusCode} {Content}", response.StatusCode, content);
-                    return new MetaTokenResponse { Error = $"Token exchange failed: {response.StatusCode}" };
+                    _logger.LogError("[MetaApiClient] Meta Token Exchange HTTP Error {StatusCode}: {Content}", response.StatusCode, content);
+                    return new MetaTokenResponse { Error = $"Meta token exchange failed ({response.StatusCode}): {content}" };
                 }
 
                 using var doc = JsonDocument.Parse(content);
                 var root = doc.RootElement;
 
+                var token = root.TryGetProperty("access_token", out var at) ? at.GetString() : null;
+                var expires = root.TryGetProperty("expires_in", out var ei) ? ei.GetInt64() : (long?)null;
+
+                _logger.LogInformation("[MetaApiClient] Meta Token Exchange Successful! AccessToken Length: {Len}, ExpiresIn: {Expires}s", token?.Length ?? 0, expires);
+
                 return new MetaTokenResponse
                 {
-                    AccessToken = root.TryGetProperty("access_token", out var at) ? at.GetString() : null,
+                    AccessToken = token,
                     TokenType = root.TryGetProperty("token_type", out var tt) ? tt.GetString() : null,
-                    ExpiresIn = root.TryGetProperty("expires_in", out var ei) ? ei.GetInt64() : null
+                    ExpiresIn = expires
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to exchange authorization code for token");
+                _logger.LogError(ex, "[MetaApiClient] Exception while exchanging authorization code for token");
                 return new MetaTokenResponse { Error = ex.Message };
             }
         }

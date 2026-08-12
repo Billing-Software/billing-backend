@@ -26,104 +26,101 @@ namespace BillingBackend.Extensions
                 logger.LogInformation("Verifying Oracle Database Schema for SmartBilling...");
 
                 // 1. Ensure Columns on Businesses table
-                ExecuteSafeSql(context, "ALTER TABLE \"Businesses\" ADD \"SellingModel\" VARCHAR2(50) DEFAULT 'GOODS_AND_SERVICES'", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Businesses\" ADD \"BusinessType\" VARCHAR2(100) DEFAULT 'General Retail Store'", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Businesses\" ADD \"GstScheme\" VARCHAR2(50) DEFAULT 'Regular'", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Businesses\" ADD \"RegisteredState\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Businesses\" ADD \"CustomTerminologyJson\" NCLOB NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Businesses\" ADD \"UpdatedAt\" TIMESTAMP NULL", logger);
+                AddColumnIfNotExists(context, "Businesses", "SellingModel", "VARCHAR2(50) DEFAULT 'GOODS_AND_SERVICES'");
+                AddColumnIfNotExists(context, "Businesses", "BusinessType", "VARCHAR2(100) DEFAULT 'General Retail Store'");
+                AddColumnIfNotExists(context, "Businesses", "GstScheme", "VARCHAR2(50) DEFAULT 'Regular'");
+                AddColumnIfNotExists(context, "Businesses", "RegisteredState", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "Businesses", "CustomTerminologyJson", "NCLOB NULL");
+                AddColumnIfNotExists(context, "Businesses", "UpdatedAt", "TIMESTAMP NULL");
 
                 // 2. Ensure Columns on BillItems table
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"HSNCode\" VARCHAR2(20) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"SACCode\" VARCHAR2(20) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"TaxableValue\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"TaxRate\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"CGSTRate\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"CGSTAmount\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"SGSTRate\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"SGSTAmount\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"IGSTRate\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"IGSTAmount\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"CessRate\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"CessAmount\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"ItemType\" VARCHAR2(50) DEFAULT 'Service'", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" MODIFY \"ItemType\" DEFAULT 'Service'", logger);
+                AddColumnIfNotExists(context, "BillItems", "HSNCode", "VARCHAR2(20) NULL");
+                AddColumnIfNotExists(context, "BillItems", "SACCode", "VARCHAR2(20) NULL");
+                AddColumnIfNotExists(context, "BillItems", "TaxableValue", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "TaxRate", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "CGSTRate", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "CGSTAmount", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "SGSTRate", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "SGSTAmount", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "IGSTRate", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "IGSTAmount", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "CessRate", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "CessAmount", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "ItemType", "VARCHAR2(50) DEFAULT 'Service'");
 
                 // 3. Ensure Columns on Customers table
-                ExecuteSafeSql(context, "ALTER TABLE \"Customers\" ADD \"GstIn\" VARCHAR2(50) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Customers\" ADD \"UpdatedAt\" TIMESTAMP NULL", logger);
+                AddColumnIfNotExists(context, "Customers", "GstIn", "VARCHAR2(50) NULL");
+                AddColumnIfNotExists(context, "Customers", "UpdatedAt", "TIMESTAMP NULL");
 
                 // 4. Ensure Columns on PaymentTransactions table
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"RazorpayPaymentId\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"RazorpayOrderId\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"RazorpaySubscriptionId\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"PaymentMethod\" VARCHAR2(50) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"RawWebhookPayload\" NCLOB NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"FailureReason\" VARCHAR2(500) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"RetryCount\" NUMBER(10) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"WebhookEventId\" NUMBER(10) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"CorrelationId\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PaymentTransactions\" ADD \"UpdatedAt\" TIMESTAMP NULL", logger);
+                AddColumnIfNotExists(context, "PaymentTransactions", "RazorpayPaymentId", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "RazorpayOrderId", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "RazorpaySubscriptionId", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "PaymentMethod", "VARCHAR2(50) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "RawWebhookPayload", "NCLOB NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "FailureReason", "VARCHAR2(500) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "RetryCount", "NUMBER(10) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "WebhookEventId", "NUMBER(10) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "CorrelationId", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "UpdatedAt", "TIMESTAMP NULL");
 
                 // 5. Ensure Columns on PendingRegistrations table
-                ExecuteSafeSql(context, "ALTER TABLE \"PendingRegistrations\" ADD \"RazorpayCustomerId\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PendingRegistrations\" ADD \"RazorpaySubscriptionId\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PendingRegistrations\" ADD \"ReminderEmailSent\" NUMBER(1) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PendingRegistrations\" ADD \"ReminderEmailSentAt\" TIMESTAMP NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PendingRegistrations\" ADD \"SelectedPlanId\" NUMBER(10) DEFAULT 1 NOT NULL", logger);
+                AddColumnIfNotExists(context, "PendingRegistrations", "RazorpayCustomerId", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "PendingRegistrations", "RazorpaySubscriptionId", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "PendingRegistrations", "ReminderEmailSent", "NUMBER(1) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "PendingRegistrations", "ReminderEmailSentAt", "TIMESTAMP NULL");
+                AddColumnIfNotExists(context, "PendingRegistrations", "SelectedPlanId", "NUMBER(10) DEFAULT 1 NOT NULL");
 
                 // 6. Ensure Columns on UserRefreshTokens table
-                ExecuteSafeSql(context, "ALTER TABLE \"UserRefreshTokens\" MODIFY \"ExpiresAt\" NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"UserRefreshTokens\" ADD \"ExpiryTime\" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"UserRefreshTokens\" ADD \"IsRevoked\" NUMBER(1) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"UserRefreshTokens\" ADD \"CreatedAt\" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL", logger);
+                AddColumnIfNotExists(context, "UserRefreshTokens", "ExpiryTime", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL");
+                AddColumnIfNotExists(context, "UserRefreshTokens", "IsRevoked", "NUMBER(1) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "UserRefreshTokens", "CreatedAt", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL");
 
                 // 7. Ensure Columns on Categories table
-                ExecuteSafeSql(context, "ALTER TABLE \"Categories\" ADD \"Type\" VARCHAR2(50) DEFAULT 'Service' NOT NULL", logger);
+                AddColumnIfNotExists(context, "Categories", "Type", "VARCHAR2(50) DEFAULT 'Service' NOT NULL");
 
                 // 8. Ensure Columns on InventoryItems table
-                ExecuteSafeSql(context, "ALTER TABLE \"InventoryItems\" RENAME COLUMN \"StockQuantity\" TO \"CurrentStock\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"InventoryItems\" ADD \"CurrentStock\" NUMBER(10) DEFAULT 0 NOT NULL", logger);
+                RenameColumnIfExists(context, "InventoryItems", "StockQuantity", "CurrentStock");
+                AddColumnIfNotExists(context, "InventoryItems", "CurrentStock", "NUMBER(10) DEFAULT 0 NOT NULL");
 
                 // 9. Ensure Columns on Bills table
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" RENAME COLUMN \"StaffMemberId\" TO \"CreatedByStaffId\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" RENAME COLUMN \"SubTotal\" TO \"Subtotal\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" RENAME COLUMN \"PaymentStatus\" TO \"Status\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"CreatedByStaffId\" NUMBER(10) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"Subtotal\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"DiscountCode\" VARCHAR2(50) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"Status\" VARCHAR2(20) DEFAULT 'Completed' NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"IdempotencyKey\" VARCHAR2(100) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"PaymentReference\" VARCHAR2(200) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"Notes\" VARCHAR2(500) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Bills\" ADD \"UpdatedAt\" TIMESTAMP NULL", logger);
+                RenameColumnIfExists(context, "Bills", "StaffMemberId", "CreatedByStaffId");
+                RenameColumnIfExists(context, "Bills", "SubTotal", "Subtotal");
+                RenameColumnIfExists(context, "Bills", "PaymentStatus", "Status");
+                AddColumnIfNotExists(context, "Bills", "CreatedByStaffId", "NUMBER(10) NULL");
+                AddColumnIfNotExists(context, "Bills", "Subtotal", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "Bills", "DiscountCode", "VARCHAR2(50) NULL");
+                AddColumnIfNotExists(context, "Bills", "Status", "VARCHAR2(20) DEFAULT 'Completed' NOT NULL");
+                AddColumnIfNotExists(context, "Bills", "IdempotencyKey", "VARCHAR2(100) NULL");
+                AddColumnIfNotExists(context, "Bills", "PaymentReference", "VARCHAR2(200) NULL");
+                AddColumnIfNotExists(context, "Bills", "Notes", "VARCHAR2(500) NULL");
+                AddColumnIfNotExists(context, "Bills", "UpdatedAt", "TIMESTAMP NULL");
 
                 // 10. Ensure Columns on BillItems table
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" RENAME COLUMN \"ItemId\" TO \"ServiceId\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" RENAME COLUMN \"Name\" TO \"ServiceName\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" RENAME COLUMN \"TotalPrice\" TO \"LineTotal\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"ServiceId\" NUMBER(10) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"ServiceName\" VARCHAR2(200) DEFAULT '' NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"BillItems\" ADD \"LineTotal\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
+                RenameColumnIfExists(context, "BillItems", "ItemId", "ServiceId");
+                RenameColumnIfExists(context, "BillItems", "Name", "ServiceName");
+                RenameColumnIfExists(context, "BillItems", "TotalPrice", "LineTotal");
+                AddColumnIfNotExists(context, "BillItems", "ServiceId", "NUMBER(10) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "ServiceName", "VARCHAR2(200) DEFAULT '' NOT NULL");
+                AddColumnIfNotExists(context, "BillItems", "LineTotal", "NUMBER(18,2) DEFAULT 0 NOT NULL");
 
                 // 11. Ensure Columns on StaffMembers table
-                ExecuteSafeSql(context, "ALTER TABLE \"StaffMembers\" ADD \"UserId\" NUMBER(10) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"StaffMembers\" ADD \"BranchId\" NUMBER(10) NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"StaffMembers\" ADD \"TotalBills\" NUMBER(10) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"StaffMembers\" ADD \"RevenueGenerated\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
+                AddColumnIfNotExists(context, "StaffMembers", "UserId", "NUMBER(10) NULL");
+                AddColumnIfNotExists(context, "StaffMembers", "BranchId", "NUMBER(10) NULL");
+                AddColumnIfNotExists(context, "StaffMembers", "TotalBills", "NUMBER(10) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "StaffMembers", "RevenueGenerated", "NUMBER(18,2) DEFAULT 0 NOT NULL");
 
                 // 12. Ensure Columns on Purchases table
-                ExecuteSafeSql(context, "ALTER TABLE \"Purchases\" ADD \"Subtotal\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"Purchases\" ADD \"TaxAmount\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
+                AddColumnIfNotExists(context, "Purchases", "Subtotal", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "Purchases", "TaxAmount", "NUMBER(18,2) DEFAULT 0 NOT NULL");
 
                 // 13. Ensure Columns on PurchaseItems table
-                ExecuteSafeSql(context, "ALTER TABLE \"PurchaseItems\" RENAME COLUMN \"UnitCost\" TO \"UnitPrice\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PurchaseItems\" RENAME COLUMN \"TotalCost\" TO \"LineTotal\"", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PurchaseItems\" ADD \"UnitPrice\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
-                ExecuteSafeSql(context, "ALTER TABLE \"PurchaseItems\" ADD \"LineTotal\" NUMBER(18,2) DEFAULT 0 NOT NULL", logger);
+                RenameColumnIfExists(context, "PurchaseItems", "UnitCost", "UnitPrice");
+                RenameColumnIfExists(context, "PurchaseItems", "TotalCost", "LineTotal");
+                AddColumnIfNotExists(context, "PurchaseItems", "UnitPrice", "NUMBER(18,2) DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "PurchaseItems", "LineTotal", "NUMBER(18,2) DEFAULT 0 NOT NULL");
 
-                logger.LogInformation("Oracle Database Schema Verification Completed.");
+                logger.LogInformation("Oracle Database Schema Verification Completed Successfully.");
             }
             catch (Exception ex)
             {
@@ -131,23 +128,42 @@ namespace BillingBackend.Extensions
             }
         }
 
-        private static void ExecuteSafeSql(BillingDbContext context, string sql, ILogger logger)
+        private static void AddColumnIfNotExists(BillingDbContext context, string tableName, string columnName, string columnDef)
         {
+            var sql = $@"
+                DECLARE
+                    v_count NUMBER := 0;
+                BEGIN
+                    SELECT COUNT(*) INTO v_count FROM user_tab_cols WHERE UPPER(table_name) = '{tableName.ToUpperInvariant()}' AND UPPER(column_name) = '{columnName.ToUpperInvariant()}';
+                    IF v_count = 0 THEN
+                        EXECUTE IMMEDIATE 'ALTER TABLE ""{tableName}"" ADD ""{columnName}"" {columnDef}';
+                    END IF;
+                END;";
             try
             {
                 context.Database.ExecuteSqlRaw(sql);
             }
-            catch (Exception ex)
+            catch { /* ignore */ }
+        }
+
+        private static void RenameColumnIfExists(BillingDbContext context, string tableName, string oldName, string newName)
+        {
+            var sql = $@"
+                DECLARE
+                    v_old_count NUMBER := 0;
+                    v_new_count NUMBER := 0;
+                BEGIN
+                    SELECT COUNT(*) INTO v_old_count FROM user_tab_cols WHERE UPPER(table_name) = '{tableName.ToUpperInvariant()}' AND UPPER(column_name) = '{oldName.ToUpperInvariant()}';
+                    SELECT COUNT(*) INTO v_new_count FROM user_tab_cols WHERE UPPER(table_name) = '{tableName.ToUpperInvariant()}' AND UPPER(column_name) = '{newName.ToUpperInvariant()}';
+                    IF v_old_count > 0 AND v_new_count = 0 THEN
+                        EXECUTE IMMEDIATE 'ALTER TABLE ""{tableName}"" RENAME COLUMN ""{oldName}"" TO ""{newName}""';
+                    END IF;
+                END;";
+            try
             {
-                if (ex.Message.Contains("ORA-01430") || ex.Message.Contains("ORA-00955") || ex.Message.Contains("already exists") || ex.Message.Contains("ORA-01451") || ex.Message.Contains("ORA-00904"))
-                {
-                    // Column modification/addition handled or non-existent, ignore safely
-                }
-                else
-                {
-                    logger.LogDebug("Database schema verification notice: {Message}", ex.Message);
-                }
+                context.Database.ExecuteSqlRaw(sql);
             }
+            catch { /* ignore */ }
         }
     }
 }

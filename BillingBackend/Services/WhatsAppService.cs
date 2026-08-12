@@ -33,7 +33,11 @@ namespace BillingBackend.Services
 
         public async Task<WhatsAppAccountDto> ConnectAsync(int businessId, WhatsAppConnectCallbackDto dto)
         {
-            _logger.LogInformation("Connecting WhatsApp for BusinessId: {BusinessId}", businessId);
+            _logger.LogInformation("==================================================");
+            _logger.LogInformation("[WhatsAppConnect] STEP 0: Starting WhatsApp connection for BusinessId: {BusinessId}", businessId);
+            _logger.LogInformation("[WhatsAppConnect] Received DTO - Code Length: {CodeLen}, WabaId: {WabaId}, PhoneNumberId: {PhoneId}, DisplayNumber: {DispNum}",
+                dto.Code?.Length ?? 0, dto.WabaId ?? "NULL", dto.PhoneNumberId ?? "NULL", dto.DisplayPhoneNumber ?? "NULL");
+            _logger.LogInformation("==================================================");
 
             string accessToken = string.Empty;
             long? expiresIn = null;
@@ -41,23 +45,29 @@ namespace BillingBackend.Services
             // Step 1: Handle direct access token or OAuth authorization code exchange
             if (!string.IsNullOrEmpty(dto.Code) && dto.Code.StartsWith("EAA"))
             {
+                _logger.LogInformation("[WhatsAppConnect] STEP 1: Code is already a Bearer Access Token (starts with EAA). Using directly.");
                 accessToken = dto.Code;
             }
             else if (!string.IsNullOrEmpty(dto.Code) && !dto.Code.StartsWith("MOCK_") && !dto.Code.StartsWith("META_TEST_"))
             {
+                _logger.LogInformation("[WhatsAppConnect] STEP 1: Code received looks like OAuth Authorization Code. Triggering ExchangeCodeForTokenAsync...");
                 var tokenResponse = await _metaApiClient.ExchangeCodeForTokenAsync(dto.Code);
                 if (!string.IsNullOrEmpty(tokenResponse.AccessToken))
                 {
                     accessToken = tokenResponse.AccessToken;
                     expiresIn = tokenResponse.ExpiresIn;
+                    _logger.LogInformation("[WhatsAppConnect] STEP 1 SUCCESS: Meta OAuth code exchanged cleanly! Token Length: {Len}, ExpiresIn: {ExpiresIn}s",
+                        accessToken.Length, expiresIn ?? 0);
                 }
                 else
                 {
-                    accessToken = dto.Code;
+                    _logger.LogError("[WhatsAppConnect] STEP 1 FAILED: Meta token exchange failed for code. Error: {Error}", tokenResponse.Error);
+                    throw new InvalidOperationException($"Meta Token Exchange Failed: {tokenResponse.Error ?? "Unknown error"}");
                 }
             }
             else
             {
+                _logger.LogInformation("[WhatsAppConnect] STEP 1: Mock/Test Code detected ('{Code}'). Using directly.", dto.Code);
                 accessToken = dto.Code;
             }
 
@@ -66,39 +76,61 @@ namespace BillingBackend.Services
             string? phoneNumberId = dto.PhoneNumberId;
             string? displayPhoneNumber = dto.DisplayPhoneNumber;
 
+            _logger.LogInformation("[WhatsAppConnect] STEP 2: Determining WABA ID and Phone Number ID...");
+
             if (!string.IsNullOrEmpty(wabaId) && string.IsNullOrEmpty(phoneNumberId))
             {
-                // Retrieve phone numbers under this WABA
+                _logger.LogInformation("[WhatsAppConnect] WabaId provided ({WabaId}) but PhoneNumberId missing. Querying WABA phone numbers...", wabaId);
                 var phoneNumbers = await _metaApiClient.GetWabaPhoneNumbersAsync(wabaId, accessToken);
                 if (phoneNumbers.Count > 0)
                 {
                     phoneNumberId = phoneNumbers[0].Id;
                     displayPhoneNumber = phoneNumbers[0].DisplayPhoneNumber ?? displayPhoneNumber;
+                    _logger.LogInformation("[WhatsAppConnect] Retrieved Phone Number from WABA: PhoneId={PhoneId}, DisplayNumber={DispNum}", phoneNumberId, displayPhoneNumber);
+                }
+                else
+                {
+                    _logger.LogWarning("[WhatsAppConnect] No phone numbers found under WABA {WabaId}.", wabaId);
                 }
             }
 
             if (string.IsNullOrEmpty(wabaId))
             {
+                _logger.LogInformation("[WhatsAppConnect] WabaId was not provided in request. Querying Meta Graph API for shared WABA details...");
                 var bizInfo = await _metaApiClient.GetSharedWabaInfoAsync(accessToken);
                 wabaId = bizInfo.WabaId ?? $"waba_{Guid.NewGuid():N}";
                 phoneNumberId ??= bizInfo.PhoneNumberId ?? $"phone_id_{Guid.NewGuid():N}";
                 displayPhoneNumber ??= bizInfo.DisplayPhoneNumber ?? "+91 98765 43210";
+                _logger.LogInformation("[WhatsAppConnect] Discovered WABA Info via Graph API: WabaId={WabaId}, PhoneId={PhoneId}, DisplayNumber={DispNum}",
+                    wabaId, phoneNumberId, displayPhoneNumber);
             }
 
             // Step 3: Subscribe BillCom App to the client's WABA webhooks
             if (!string.IsNullOrEmpty(wabaId) && !wabaId.StartsWith("waba_"))
             {
+                _logger.LogInformation("[WhatsAppConnect] STEP 3: Subscribing BillCom App to WABA webhooks for WabaId={WabaId}...", wabaId);
                 await _metaApiClient.SubscribeWabaToAppAsync(wabaId, accessToken);
+                _logger.LogInformation("[WhatsAppConnect] STEP 3 SUCCESS: Webhook subscription call completed.");
+            }
+            else
+            {
+                _logger.LogInformation("[WhatsAppConnect] STEP 3 SKIPPED: Mock/fallback WabaId detected ({WabaId}).", wabaId);
             }
 
             // Step 4: Create or update the WhatsApp account record
+            _logger.LogInformation("[WhatsAppConnect] STEP 4: Saving/updating WhatsAppAccount in Oracle Database for BusinessId: {BusinessId}...", businessId);
             var account = await _repository.GetByBusinessIdAsync(businessId);
             if (account == null)
             {
+                _logger.LogInformation("[WhatsAppConnect] No existing WhatsApp record for BusinessId {BusinessId}. Creating new entity.", businessId);
                 account = new WhatsAppAccount
                 {
                     BusinessId = businessId
                 };
+            }
+            else
+            {
+                _logger.LogInformation("[WhatsAppConnect] Updating existing WhatsApp record Id={Id} for BusinessId {BusinessId}.", account.Id, businessId);
             }
 
             account.WabaId = wabaId;
@@ -113,19 +145,24 @@ namespace BillingBackend.Services
             account.DisconnectedAt = null;
 
             await _repository.CreateOrUpdateAsync(account);
+            _logger.LogInformation("[WhatsAppConnect] STEP 4 SUCCESS: WhatsApp account record saved to Oracle DB successfully.");
 
             // Step 5: Automatically create / provision default BillCom invoice template on customer WABA
             try
             {
+                _logger.LogInformation("[WhatsAppConnect] STEP 5: Provisioning default BillCom invoice template...");
                 await EnsureDefaultInvoiceTemplateAsync(businessId);
+                _logger.LogInformation("[WhatsAppConnect] STEP 5 SUCCESS: Invoice template provisioned.");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to auto-provision default invoice template for BusinessId {BusinessId}", businessId);
+                _logger.LogWarning(ex, "[WhatsAppConnect] STEP 5 WARNING: Failed to auto-provision default invoice template for BusinessId {BusinessId}", businessId);
             }
 
-            _logger.LogInformation("WhatsApp connected successfully for BusinessId: {BusinessId}, WABA: {WabaId}, PhoneId: {PhoneId}",
+            _logger.LogInformation("==================================================");
+            _logger.LogInformation("[WhatsAppConnect] SUCCESS: WhatsApp Account Connected cleanly! BusinessId={BizId}, WabaId={WabaId}, PhoneId={PhoneId}",
                 businessId, account.WabaId, account.PhoneNumberId);
+            _logger.LogInformation("==================================================");
 
             return MapToDto(account);
         }
