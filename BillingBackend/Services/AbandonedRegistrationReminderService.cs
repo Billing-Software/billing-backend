@@ -41,7 +41,14 @@ namespace BillingBackend.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[BackgroundService Error] AbandonedRegistrationReminderService encountered an error");
+                    if (ex.Message.Contains("ORA-00942") || ex.InnerException?.Message.Contains("ORA-00942") == true)
+                    {
+                        _logger.LogWarning("[AbandonedRegistrationReminderService] PendingRegistrations table does not exist in Oracle DB yet. Will retry after schema initialization.");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[BackgroundService Notice] AbandonedRegistrationReminderService notice: {Message}", ex.Message);
+                    }
                 }
 
                 await Task.Delay(_checkInterval, stoppingToken);
