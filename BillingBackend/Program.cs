@@ -24,7 +24,7 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Automatically verify and apply missing columns & tables to Oracle DB on startup
+// Automatically verify and apply missing columns & tables to SQL Server DB on startup
 DatabaseSchemaInitializer.EnsureDatabaseSchemaUpdated(app.Services);
 
 // Configure the HTTP request pipeline.

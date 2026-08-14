@@ -23,11 +23,11 @@ namespace BillingBackend.Data.Entities
         public string Username { get; set; } = string.Empty;
 
         [Required]
-        [Column(TypeName = "RAW(2000)")]
+        [Column(TypeName = "varbinary(max)")]
         public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
 
         [Required]
-        [Column(TypeName = "RAW(2000)")]
+        [Column(TypeName = "varbinary(max)")]
         public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
 
         [Required]
@@ -63,7 +63,7 @@ namespace BillingBackend.Data.Entities
 
         public DateTime ExpiresAt { get; set; } = DateTime.UtcNow.AddHours(24);
 
-        [Column(TypeName = "NCLOB")]
+        [Column(TypeName = "nvarchar(max)")]
         public string? RawRegistrationData { get; set; }
     }
 }

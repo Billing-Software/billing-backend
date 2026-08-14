@@ -118,7 +118,7 @@ namespace BillingBackend.Services
             }
 
             // Step 4: Create or update the WhatsApp account record
-            _logger.LogInformation("[WhatsAppConnect] STEP 4: Saving/updating WhatsAppAccount in Oracle Database for BusinessId: {BusinessId}...", businessId);
+            _logger.LogInformation("[WhatsAppConnect] STEP 4: Saving/updating WhatsAppAccount in SQL Server Database for BusinessId: {BusinessId}...", businessId);
             var account = await _repository.GetByBusinessIdAsync(businessId);
             if (account == null)
             {
@@ -145,7 +145,7 @@ namespace BillingBackend.Services
             account.DisconnectedAt = null;
 
             await _repository.CreateOrUpdateAsync(account);
-            _logger.LogInformation("[WhatsAppConnect] STEP 4 SUCCESS: WhatsApp account record saved to Oracle DB successfully.");
+            _logger.LogInformation("[WhatsAppConnect] STEP 4 SUCCESS: WhatsApp account record saved to SQL Server DB successfully.");
 
             // Step 5: Automatically create / provision default BillCom invoice template on customer WABA
             try

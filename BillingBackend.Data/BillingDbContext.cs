@@ -46,8 +46,8 @@ namespace BillingBackend.Data
             {
                 entity.HasIndex(u => u.Username).IsUnique();
                 entity.HasIndex(u => u.Email).IsUnique();
-                entity.Property(u => u.PasswordHash).HasColumnType("RAW(2000)");
-                entity.Property(u => u.PasswordSalt).HasColumnType("RAW(2000)");
+                entity.Property(u => u.PasswordHash).HasColumnType("varbinary(max)");
+                entity.Property(u => u.PasswordSalt).HasColumnType("varbinary(max)");
             });
 
             // ===== Businesses =====
@@ -153,7 +153,7 @@ namespace BillingBackend.Data
                 // Unique idempotency key per business (prevents duplicate bill creation)
                 entity.HasIndex(bill => new { bill.BusinessId, bill.IdempotencyKey })
                     .IsUnique()
-                    .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+                    .HasFilter("[IdempotencyKey] IS NOT NULL");
             });
 
             // ===== BillItems =====
@@ -251,8 +251,8 @@ namespace BillingBackend.Data
             {
                 entity.HasIndex(pr => pr.Token).IsUnique();
                 entity.HasIndex(pr => pr.Email);
-                entity.Property(pr => pr.PasswordHash).HasColumnType("RAW(2000)");
-                entity.Property(pr => pr.PasswordSalt).HasColumnType("RAW(2000)");
+                entity.Property(pr => pr.PasswordHash).HasColumnType("varbinary(max)");
+                entity.Property(pr => pr.PasswordSalt).HasColumnType("varbinary(max)");
             });
 
             // ===== AuditLogs =====
@@ -281,7 +281,7 @@ namespace BillingBackend.Data
             modelBuilder.Entity<WebhookEventLog>(entity =>
             {
                 entity.HasIndex(w => new { w.Source, w.ExternalEventId }).IsUnique()
-                    .HasFilter("\"ExternalEventId\" IS NOT NULL");
+                    .HasFilter("[ExternalEventId] IS NOT NULL");
                 entity.HasIndex(w => w.ProcessingStatus);
                 entity.HasIndex(w => w.CreatedAt);
             });

@@ -38,7 +38,7 @@ namespace BillingBackend.Data.Entities
         /// <summary>
         /// Full raw JSON payload of the webhook for forensic analysis and replay.
         /// </summary>
-        [Column(TypeName = "NCLOB")]
+        [Column(TypeName = "nvarchar(max)")]
         public string? RawPayload { get; set; }
 
         /// <summary>

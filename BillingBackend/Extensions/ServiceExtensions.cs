@@ -3,7 +3,6 @@ using BillingBackend.Repositories;
 using BillingBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Oracle.EntityFrameworkCore.Infrastructure;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.Extensions.Configuration;
@@ -19,8 +18,7 @@ namespace BillingBackend.Extensions
         public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration config)
         {
             services.AddDbContext<BillingDbContext>(options =>
-                options.UseOracle(config.GetConnectionString("DefaultConnection"),
-                    b => b.UseOracleSQLCompatibility(OracleSQLCompatibility.DatabaseVersion19)));
+                options.UseSqlServer(config.GetConnectionString("DefaultConnection")));
             return services;
         }
 

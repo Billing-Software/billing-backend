@@ -19,11 +19,11 @@ namespace BillingBackend.Data.Entities
         public string Email { get; set; } = string.Empty;
 
         [Required]
-        [Column(TypeName = "RAW(2000)")]
+        [Column(TypeName = "varbinary(max)")]
         public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
 
         [Required]
-        [Column(TypeName = "RAW(2000)")]
+        [Column(TypeName = "varbinary(max)")]
         public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
 
         [Required]

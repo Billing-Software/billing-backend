@@ -41,9 +41,9 @@ namespace BillingBackend.Services
                 }
                 catch (Exception ex)
                 {
-                    if (ex.Message.Contains("ORA-00942") || ex.InnerException?.Message.Contains("ORA-00942") == true)
+                    if (ex.Message.Contains("Invalid object name") || ex.InnerException?.Message.Contains("Invalid object name") == true)
                     {
-                        _logger.LogWarning("[AbandonedRegistrationReminderService] PendingRegistrations table does not exist in Oracle DB yet. Will retry after schema initialization.");
+                        _logger.LogWarning("[AbandonedRegistrationReminderService] PendingRegistrations table does not exist in SQL Server DB yet. Will retry after schema initialization.");
                     }
                     else
                     {
