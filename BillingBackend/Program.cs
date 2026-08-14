@@ -28,15 +28,14 @@ var app = builder.Build();
 DatabaseSchemaInitializer.EnsureDatabaseSchemaUpdated(app.Services);
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+
+app.MapOpenApi();
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.MapOpenApi();
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Smart Billing API V1");
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Smart Billing API V1");
+});
+
 
 // app.UseHttpsRedirection();
 
