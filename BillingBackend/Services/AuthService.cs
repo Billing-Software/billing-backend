@@ -244,10 +244,10 @@ namespace BillingBackend.Services
             await _userRepository.SaveChangesAsync();
 
             // Prepare email template
-            var subject = "SmartBill Pro - Password Reset Code";
+            var subject = "BillCom - Password Reset Code";
             var body = $@"
                 <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
-                    <h2 style='color: #006a61; text-align: center; font-family: Outfit, sans-serif;'>SmartBill Pro</h2>
+                    <h2 style='color: #006a61; text-align: center; font-family: Outfit, sans-serif;'>BillCom</h2>
                     <p>Hello,</p>
                     <p>We received a request to reset your password. Use the verification code below to complete the reset process:</p>
                     <div style='background-color: #f8f9ff; border: 1px dashed #006a61; padding: 15px; text-align: center; font-size: 26px; font-weight: bold; letter-spacing: 4px; color: #0b1c30; border-radius: 6px; margin: 20px 0;'>

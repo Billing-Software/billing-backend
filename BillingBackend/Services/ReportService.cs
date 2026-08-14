@@ -225,7 +225,7 @@ namespace BillingBackend.Services
             var sb = new StringBuilder();
 
             // Header Section
-            sb.AppendLine($"SMARTBILLING (BILLCOM) - GST TAX SUMMARY REPORT");
+            sb.AppendLine($"BILLCOM - GST TAX SUMMARY REPORT");
             sb.AppendLine($"Business Name,{EscapeCsv(report.BusinessName)}");
             sb.AppendLine($"GSTIN,{EscapeCsv(report.GstIn)}");
             sb.AppendLine($"Period,{EscapeCsv(report.PeriodLabel)}");

@@ -24,7 +24,7 @@ namespace BillingBackend.Services
             var username = smtpSection["Username"] ?? "";
             var password = smtpSection["Password"] ?? "";
             var fromEmail = smtpSection["FromEmail"] ?? "";
-            var fromName = smtpSection["FromName"] ?? "SmartBill Pro";
+            var fromName = smtpSection["FromName"] ?? "BillCom";
 
             int port = int.TryParse(portStr, out var p) ? p : 587;
             bool enableSsl = bool.TryParse(enableSslStr, out var s) ? s : true;

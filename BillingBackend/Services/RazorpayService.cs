@@ -147,16 +147,16 @@ namespace BillingBackend.Services
         {
             try
             {
-                string name = "SmartBill Starter Plan";
+                string name = "BillCom Starter Plan";
                 int amount = 49900; // in paise (₹499)
                 if (planCode.Contains("growth") || planCode.Contains("pro") || planCode.Contains("professional"))
                 {
-                    name = "SmartBill Growth Plan";
+                    name = "BillCom Growth Plan";
                     amount = 149900; // ₹1,499
                 }
                 else if (planCode.Contains("ent") || planCode.Contains("enterprise"))
                 {
-                    name = "SmartBill Enterprise Plan";
+                    name = "BillCom Enterprise Plan";
                     amount = 499900; // ₹4,999
                 }
 

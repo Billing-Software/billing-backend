@@ -29,7 +29,7 @@ namespace BillingBackend.Extensions
                     connection.Open();
                 }
 
-                logger.LogInformation("Verifying SQL Server Database Schema for SmartBilling...");
+                logger.LogInformation("Verifying SQL Server Database Schema for BillCom...");
 
                 // 0. Ensure Core Tables exist if database is fresh or partially initialized
                 CreateTableIfNotExists(context, "SubscriptionPlans", @"

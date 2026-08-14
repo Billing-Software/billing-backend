@@ -87,7 +87,7 @@ namespace BillingBackend.Services
                         var recoveryLink = $"{marketingSiteUrl.TrimEnd('/')}/#/checkout/resume?token={pending.Token}";
                         
                         var emailBody = $@"
-                            <h2>Complete your SmartBill Pro Setup!</h2>
+                            <h2>Complete your BillCom Setup!</h2>
                             <p>Hi {pending.Username},</p>
                             <p>We noticed you started setting up your account for <strong>{pending.LegalName}</strong>, but did not complete your payment setup.</p>
                             <p>Your details are safely saved. Click the link below to complete your Razorpay Autopay setup and activate your account:</p>
@@ -98,9 +98,9 @@ namespace BillingBackend.Services
                             </p>
                             <p>If the button doesn't work, copy and paste this link into your browser: <br/> {recoveryLink}</p>
                             <br/>
-                            <p>Best regards,<br/>SmartBill Pro Onboarding Support Team</p>";
+                            <p>Best regards,<br/>BillCom Onboarding Support Team</p>";
 
-                        await emailService.SendEmailAsync(pending.Email, "Finish setting up your SmartBill Pro Account", emailBody);
+                        await emailService.SendEmailAsync(pending.Email, "Finish setting up your BillCom Account", emailBody);
 
                         // Mark as sent
                         pending.ReminderEmailSent = true;

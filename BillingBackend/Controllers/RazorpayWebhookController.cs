@@ -298,7 +298,7 @@ namespace BillingBackend.Controllers
                             if (owner != null && !string.IsNullOrEmpty(owner.Email))
                             {
                                 var emailBody = $@"
-                                    <h2>SmartBill Pro - Subscription Renewal Payment Failed!</h2>
+                                    <h2>BillCom - Subscription Renewal Payment Failed!</h2>
                                     <p>Dear {owner.Username},</p>
                                     <p>We attempted to charge your card/UPI mandate for your subscription renewal, but the transaction failed.</p>
                                     <p><strong>Business Store:</strong> {business.LegalName}</p>
@@ -306,9 +306,9 @@ namespace BillingBackend.Controllers
                                     <p><strong>Gateway Reason:</strong> {failureReason}</p>
                                     <p>To avoid service disruption and lockout, please login to your billing manager page or contact platform support to resolve this payment issue.</p>
                                     <br/>
-                                    <p>Best regards,<br/>SmartBill Pro Support Operations Team</p>";
+                                    <p>Best regards,<br/>BillCom Support Operations Team</p>";
 
-                                await _emailService.SendEmailAsync(owner.Email, "SmartBill Pro - Action Required: Subscription Payment Failed", emailBody);
+                                await _emailService.SendEmailAsync(owner.Email, "BillCom - Action Required: Subscription Payment Failed", emailBody);
                                 _logger.LogInformation("[RazorpayWebhook Success] Sent billing failure notification email to: {Email} for Business ID: {BusinessId}", owner.Email, business.Id);
                             }
                         }

@@ -443,16 +443,16 @@ namespace BillingBackend.Controllers
                     try
                     {
                         var emailBody = $@"
-                            <h2>Welcome to SmartBill Pro!</h2>
+                            <h2>Welcome to BillCom!</h2>
                             <p>Dear {pending.Username},</p>
                             <p>Your subscription is successfully activated for <strong>{plan.Name}</strong>.</p>
                             <p><strong>Business Name:</strong> {pending.LegalName}</p>
                             <p><strong>Branch Limit:</strong> {(plan.MaxBranches == -1 ? "Unlimited" : plan.MaxBranches.ToString())} Branch(es)</p>
                             <p>Download our recommended Android App or open the web client to start billing today.</p>
                             <br/>
-                            <p>Best regards,<br/>SmartBill Pro Operations Team</p>";
+                            <p>Best regards,<br/>BillCom Operations Team</p>";
 
-                        await _emailService.SendEmailAsync(pending.Email, "SmartBill Pro - Account Activated!", emailBody);
+                        await _emailService.SendEmailAsync(pending.Email, "BillCom - Account Activated!", emailBody);
                     }
                     catch (Exception ex)
                     {

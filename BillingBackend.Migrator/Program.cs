@@ -13,7 +13,7 @@ namespace BillingBackend.Migrator
         static void Main(string[] args)
         {
             Console.WriteLine("==================================================");
-            Console.WriteLine("SmartBilling Local SQL Server DB Fresh Setup & Purge");
+            Console.WriteLine("BillCom Local SQL Server DB Fresh Setup & Purge");
             Console.WriteLine("Target: SQL Server (Integrated Security) @ localhost");
             Console.WriteLine("==================================================");
 

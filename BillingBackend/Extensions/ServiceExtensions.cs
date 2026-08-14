@@ -132,7 +132,7 @@ namespace BillingBackend.Extensions
             services.AddEndpointsApiExplorer();
             services.AddSwaggerGen(c =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Smart Billing API", Version = "v1" });
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "BillCom API", Version = "v1" });
 
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
