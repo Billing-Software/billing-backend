@@ -61,6 +61,36 @@ namespace BillingBackend.Controllers
             }
         }
 
+        [HttpGet("plans")]
+        public async Task<IActionResult> GetPlans()
+        {
+            try
+            {
+                var plans = await _context.SubscriptionPlans
+                    .Where(p => p.IsActive)
+                    .OrderBy(p => p.Id)
+                    .Select(p => new
+                    {
+                        id = p.Id,
+                        name = p.Name,
+                        monthlyPrice = p.MonthlyPrice,
+                        yearlyPrice = p.YearlyPrice,
+                        maxBranches = p.MaxBranches,
+                        maxStaff = p.MaxStaff,
+                        razorpayPlanIdMonthly = p.RazorpayPlanIdMonthly,
+                        razorpayPlanIdYearly = p.RazorpayPlanIdYearly
+                    })
+                    .ToListAsync();
+
+                return Ok(plans);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[RegistrationController] Error retrieving subscription plans");
+                return StatusCode(500, new { message = "Error retrieving subscription plans.", error = ex.Message });
+            }
+        }
+
         [HttpPost("start")]
         public async Task<IActionResult> StartRegistration([FromBody] RegisterDto dto, [FromQuery] int planId)
         {
