@@ -233,6 +233,21 @@ namespace BillingBackend.Extensions
                 AddColumnIfNotExists(context, "PurchaseItems", "UnitPrice", "DECIMAL(18,2) DEFAULT 0 NOT NULL");
                 AddColumnIfNotExists(context, "PurchaseItems", "LineTotal", "DECIMAL(18,2) DEFAULT 0 NOT NULL");
 
+                // Seed SubscriptionPlans if table exists but empty
+                context.Database.ExecuteSqlRaw(@"
+                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'SubscriptionPlans')
+                    AND NOT EXISTS (SELECT 1 FROM [SubscriptionPlans])
+                    BEGIN
+                        SET IDENTITY_INSERT [SubscriptionPlans] ON;
+                        INSERT INTO [SubscriptionPlans] ([Id], [Name], [RazorpayPlanIdMonthly], [RazorpayPlanIdYearly], [MonthlyPrice], [YearlyPrice], [MaxBranches], [MaxStaff], [IsActive])
+                        VALUES 
+                        (1, 'Starter Plan', 'plan_starter_monthly', 'plan_starter_yearly', 499.00, 4999.00, 1, 2, 1),
+                        (2, 'Growth Plan', 'plan_growth_monthly', 'plan_growth_yearly', 1499.00, 14990.00, 5, 10, 1),
+                        (3, 'Enterprise Plan', 'plan_enterprise_monthly', 'plan_enterprise_yearly', 4999.00, 49990.00, 99, 999, 1);
+                        SET IDENTITY_INSERT [SubscriptionPlans] OFF;
+                    END
+                ");
+
                 logger.LogInformation("SQL Server Database Schema Verification Completed Successfully.");
             }
             catch (Exception ex)

@@ -286,6 +286,13 @@ namespace BillingBackend.Data
                 entity.HasIndex(w => w.CreatedAt);
             });
 
+            // ===== Seed Subscription Plans =====
+            modelBuilder.Entity<SubscriptionPlan>().HasData(
+                new SubscriptionPlan { Id = 1, Name = "Starter Plan", RazorpayPlanIdMonthly = "plan_starter_monthly", RazorpayPlanIdYearly = "plan_starter_yearly", MonthlyPrice = 499.00m, YearlyPrice = 4999.00m, MaxBranches = 1, MaxStaff = 2, IsActive = true },
+                new SubscriptionPlan { Id = 2, Name = "Growth Plan", RazorpayPlanIdMonthly = "plan_growth_monthly", RazorpayPlanIdYearly = "plan_growth_yearly", MonthlyPrice = 1499.00m, YearlyPrice = 14990.00m, MaxBranches = 5, MaxStaff = 10, IsActive = true },
+                new SubscriptionPlan { Id = 3, Name = "Enterprise Plan", RazorpayPlanIdMonthly = "plan_enterprise_monthly", RazorpayPlanIdYearly = "plan_enterprise_yearly", MonthlyPrice = 4999.00m, YearlyPrice = 49990.00m, MaxBranches = 99, MaxStaff = 999, IsActive = true }
+            );
+
             // ===== Seed Tax Categories =====
             modelBuilder.Entity<TaxCategory>().HasData(
                 new TaxCategory { Id = 1, BusinessId = null, Name = "Standard Goods (18%)", TaxType = "Goods", HSNCode = "9999", GSTPercentage = 18.00m, CGSTPercentage = 9.00m, SGSTPercentage = 9.00m, IGSTPercentage = 18.00m, CessPercentage = 0.00m },

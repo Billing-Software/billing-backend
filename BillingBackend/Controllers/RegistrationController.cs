@@ -81,58 +81,12 @@ namespace BillingBackend.Controllers
                     return BadRequest(new { message = "Email already exists." });
                 }
 
-                // 2. Resolve Subscription Plan
-                var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId);
-                string razorpayPlanId = "plan_mock_starter";
-                if (plan != null)
-                {
-                    razorpayPlanId = plan.RazorpayPlanIdMonthly; // Default to monthly
-                }
-                else
-                {
-                    // Seeding fallback plans dynamically if table is empty
-                    if (!await _context.SubscriptionPlans.AnyAsync())
-                    {
-                        var starter = new SubscriptionPlan
-                        {
-                            Id = 1,
-                            Name = "Starter Plan",
-                            RazorpayPlanIdMonthly = "plan_starter_monthly",
-                            RazorpayPlanIdYearly = "plan_starter_yearly",
-                            MonthlyPrice = 499.00m,
-                            YearlyPrice = 4999.00m,
-                            MaxBranches = 1,
-                            MaxStaff = 2
-                        };
-                        var pro = new SubscriptionPlan
-                        {
-                            Id = 2,
-                            Name = "Professional Plan",
-                            RazorpayPlanIdMonthly = "plan_pro_monthly",
-                            RazorpayPlanIdYearly = "plan_pro_yearly",
-                            MonthlyPrice = 999.00m,
-                            YearlyPrice = 9999.00m,
-                            MaxBranches = 5,
-                            MaxStaff = 10
-                        };
-                        var ent = new SubscriptionPlan
-                        {
-                            Id = 3,
-                            Name = "Enterprise Plan",
-                            RazorpayPlanIdMonthly = "plan_ent_monthly",
-                            RazorpayPlanIdYearly = "plan_ent_yearly",
-                            MonthlyPrice = 1999.00m,
-                            YearlyPrice = 19999.00m,
-                            MaxBranches = -1,
-                            MaxStaff = 100
-                        };
-                        _context.SubscriptionPlans.AddRange(starter, pro, ent);
-                        await _context.SaveChangesAsync();
-                        
-                        var resolvedPlan = planId == 2 ? pro : (planId == 3 ? ent : starter);
-                        razorpayPlanId = resolvedPlan.RazorpayPlanIdMonthly;
-                    }
-                }
+                // 2. Resolve Subscription Plan by fixed ID from SubscriptionPlans table
+                var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId)
+                           ?? await _context.SubscriptionPlans.FirstOrDefaultAsync()
+                           ?? new SubscriptionPlan { Id = 1, RazorpayPlanIdMonthly = "plan_starter_monthly" };
+
+                string razorpayPlanId = plan.RazorpayPlanIdMonthly;
 
                 // 3. Create Razorpay Customer & Subscription
                 var razorpayCustomerId = await _razorpayService.CreateCustomerAsync(dto.Username, dto.Email, dto.BusinessPhone ?? "");
