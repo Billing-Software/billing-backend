@@ -66,21 +66,52 @@ namespace BillingBackend.Controllers
         {
             try
             {
-                var plans = await _context.SubscriptionPlans
+                var dbPlans = await _context.SubscriptionPlans
                     .Where(p => p.IsActive)
-                    .OrderBy(p => p.Id)
-                    .Select(p => new
+                    .OrderBy(p => p.DisplayOrder)
+                    .ToListAsync();
+
+                var plans = dbPlans.Select(p =>
+                {
+                    var subtitle = !string.IsNullOrWhiteSpace(p.Subtitle) ? p.Subtitle : (
+                        p.Id == 1 ? "For single cash register outlets" :
+                        p.Id == 2 ? "Best for expanding retail franchises" :
+                        "For large chains with dedicated needs"
+                    );
+
+                    var isPopular = p.IsPopular || p.Id == 2;
+
+                    object[] features = Array.Empty<object>();
+                    if (!string.IsNullOrWhiteSpace(p.FeaturesJson) && p.FeaturesJson != "[]")
+                    {
+                        try
+                        {
+                            features = System.Text.Json.JsonSerializer.Deserialize<object[]>(p.FeaturesJson) ?? Array.Empty<object>();
+                        }
+                        catch { }
+                    }
+
+                    if (features.Length == 0)
+                    {
+                        features = GetDefaultFeaturesForPlan(p.Id);
+                    }
+
+                    return new
                     {
                         id = p.Id,
                         name = p.Name,
+                        subtitle = subtitle,
                         monthlyPrice = p.MonthlyPrice,
                         yearlyPrice = p.YearlyPrice,
                         maxBranches = p.MaxBranches,
                         maxStaff = p.MaxStaff,
+                        isPopular = isPopular,
+                        displayOrder = p.DisplayOrder,
                         razorpayPlanIdMonthly = p.RazorpayPlanIdMonthly,
-                        razorpayPlanIdYearly = p.RazorpayPlanIdYearly
-                    })
-                    .ToListAsync();
+                        razorpayPlanIdYearly = p.RazorpayPlanIdYearly,
+                        features = features
+                    };
+                });
 
                 return Ok(plans);
             }
@@ -88,6 +119,46 @@ namespace BillingBackend.Controllers
             {
                 _logger.LogError(ex, "[RegistrationController] Error retrieving subscription plans");
                 return StatusCode(500, new { message = "Error retrieving subscription plans.", error = ex.Message });
+            }
+        }
+
+        private static object[] GetDefaultFeaturesForPlan(int planId)
+        {
+            if (planId == 1)
+            {
+                return new object[]
+                {
+                    new { text = "1 Branch & 2 Cashier Profiles", included = true },
+                    new { text = "GST & Non-GST Invoicing", included = true },
+                    new { text = "CRM Customer Directory", included = true },
+                    new { text = "SMS Invoice Dispatches", included = true },
+                    new { text = "Auto WhatsApp Webhooks", included = false },
+                    new { text = "Multi-Branch Syncing", included = false }
+                };
+            }
+            else if (planId == 2)
+            {
+                return new object[]
+                {
+                    new { text = "Up to 5 Branches Syncing", included = true },
+                    new { text = "Up to 10 Cashier Profiles", included = true },
+                    new { text = "Unlimited GST Invoices", included = true },
+                    new { text = "Auto WhatsApp Webhooks", included = true },
+                    new { text = "Stock Warning Alerts", included = true },
+                    new { text = "Dedicated Database Node", included = false }
+                };
+            }
+            else
+            {
+                return new object[]
+                {
+                    new { text = "Unlimited Branches & Cashiers", included = true },
+                    new { text = "Dedicated Database Cluster", included = true },
+                    new { text = "Custom PDF Invoice Templates", included = true },
+                    new { text = "SMS + WhatsApp Gateway Sync", included = true },
+                    new { text = "24/7 Priority Dedicated Manager", included = true },
+                    new { text = "API Integrations & Webhooks", included = true }
+                };
             }
         }
 

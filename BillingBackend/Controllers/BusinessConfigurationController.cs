@@ -36,7 +36,7 @@ namespace BillingBackend.Controllers
         {
             try
             {
-                var config = await _configService.GetConfigurationAsync(CurrentBusinessId);
+                var config = await _configService.GetConfigurationAsync(CurrentBusinessId, CurrentUserRole);
                 return Ok(config);
             }
             catch (Exception ex)

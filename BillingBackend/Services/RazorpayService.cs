@@ -49,12 +49,15 @@ namespace BillingBackend.Services
                     return $"cust_simulated_{Guid.NewGuid().ToString().Substring(0, 8)}";
                 }
 
-                var payload = new
+                var payload = new Dictionary<string, object>
                 {
-                    name = name,
-                    email = email,
-                    contact = phone
+                    { "name", name },
+                    { "email", email }
                 };
+                if (!string.IsNullOrWhiteSpace(phone) && phone.Trim().Length >= 10)
+                {
+                    payload["contact"] = phone.Trim();
+                }
 
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
                 var response = await _httpClient.PostAsync("customers", content);
@@ -102,14 +105,18 @@ namespace BillingBackend.Services
                     }
                 }
 
-                var payload = new
+                var payload = new Dictionary<string, object>
                 {
-                    plan_id = planId,
-                    customer_id = customerId,
-                    total_count = 120, // 10 years of monthly/yearly cycles
-                    quantity = 1,
-                    customer_notify = 1
+                    { "plan_id", planId },
+                    { "total_count", 120 }, // 10 years of monthly/yearly cycles
+                    { "quantity", 1 },
+                    { "customer_notify", 1 }
                 };
+
+                if (!string.IsNullOrWhiteSpace(customerId) && !customerId.StartsWith("cust_simulated_"))
+                {
+                    payload["customer_id"] = customerId;
+                }
 
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
                 var response = await _httpClient.PostAsync("subscriptions", content);

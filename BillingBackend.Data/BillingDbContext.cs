@@ -36,6 +36,9 @@ namespace BillingBackend.Data
         public DbSet<HSNMaster> HSNMasters { get; set; }
         public DbSet<SACMaster> SACMasters { get; set; }
         public DbSet<BusinessTypeMaster> BusinessTypeMasters { get; set; }
+        public DbSet<AppFeature> AppFeatures { get; set; }
+        public DbSet<PlanFeature> PlanFeatures { get; set; }
+        public DbSet<RoleFeature> RoleFeatures { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -277,6 +280,39 @@ namespace BillingBackend.Data
                 entity.Property(s => s.YearlyPrice).HasPrecision(18, 2);
             });
 
+            // ===== AppFeatures =====
+            modelBuilder.Entity<AppFeature>(entity =>
+            {
+                entity.HasIndex(f => f.FeatureKey).IsUnique();
+            });
+
+            // ===== PlanFeatures =====
+            modelBuilder.Entity<PlanFeature>(entity =>
+            {
+                entity.HasOne(pf => pf.Plan)
+                    .WithMany()
+                    .HasForeignKey(pf => pf.PlanId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(pf => pf.Feature)
+                    .WithMany(f => f.PlanFeatures)
+                    .HasForeignKey(pf => pf.FeatureId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(pf => new { pf.PlanId, pf.FeatureId }).IsUnique();
+            });
+
+            // ===== RoleFeatures =====
+            modelBuilder.Entity<RoleFeature>(entity =>
+            {
+                entity.HasOne(rf => rf.Feature)
+                    .WithMany(f => f.RoleFeatures)
+                    .HasForeignKey(rf => rf.FeatureId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(rf => new { rf.RoleName, rf.FeatureId }).IsUnique();
+            });
+
             // ===== WebhookEventLogs =====
             modelBuilder.Entity<WebhookEventLog>(entity =>
             {
@@ -288,10 +324,115 @@ namespace BillingBackend.Data
 
             // ===== Seed Subscription Plans =====
             modelBuilder.Entity<SubscriptionPlan>().HasData(
-                new SubscriptionPlan { Id = 1, Name = "Starter Plan", RazorpayPlanIdMonthly = "plan_starter_monthly", RazorpayPlanIdYearly = "plan_starter_yearly", MonthlyPrice = 499.00m, YearlyPrice = 4999.00m, MaxBranches = 1, MaxStaff = 2, IsActive = true },
-                new SubscriptionPlan { Id = 2, Name = "Growth Plan", RazorpayPlanIdMonthly = "plan_growth_monthly", RazorpayPlanIdYearly = "plan_growth_yearly", MonthlyPrice = 1499.00m, YearlyPrice = 14990.00m, MaxBranches = 5, MaxStaff = 10, IsActive = true },
-                new SubscriptionPlan { Id = 3, Name = "Enterprise Plan", RazorpayPlanIdMonthly = "plan_enterprise_monthly", RazorpayPlanIdYearly = "plan_enterprise_yearly", MonthlyPrice = 4999.00m, YearlyPrice = 49990.00m, MaxBranches = 99, MaxStaff = 999, IsActive = true }
+                new SubscriptionPlan
+                {
+                    Id = 1,
+                    Name = "Starter Plan",
+                    Subtitle = "For single cash register outlets",
+                    RazorpayPlanIdMonthly = "plan_starter_monthly",
+                    RazorpayPlanIdYearly = "plan_starter_yearly",
+                    MonthlyPrice = 499.00m,
+                    YearlyPrice = 4999.00m,
+                    MaxBranches = 1,
+                    MaxStaff = 2,
+                    IsPopular = false,
+                    DisplayOrder = 1,
+                    FeaturesJson = "[{\"text\":\"1 Branch & 2 Cashier Profiles\",\"included\":true},{\"text\":\"GST & Non-GST Invoicing\",\"included\":true},{\"text\":\"CRM Customer Directory\",\"included\":true},{\"text\":\"SMS Invoice Dispatches\",\"included\":true},{\"text\":\"Auto WhatsApp Webhooks\",\"included\":false},{\"text\":\"Multi-Branch Syncing\",\"included\":false}]",
+                    IsActive = true
+                },
+                new SubscriptionPlan
+                {
+                    Id = 2,
+                    Name = "Growth Plan",
+                    Subtitle = "Best for expanding retail franchises",
+                    RazorpayPlanIdMonthly = "plan_growth_monthly",
+                    RazorpayPlanIdYearly = "plan_growth_yearly",
+                    MonthlyPrice = 1499.00m,
+                    YearlyPrice = 14990.00m,
+                    MaxBranches = 5,
+                    MaxStaff = 10,
+                    IsPopular = true,
+                    DisplayOrder = 2,
+                    FeaturesJson = "[{\"text\":\"Up to 5 Branches Syncing\",\"included\":true},{\"text\":\"Up to 10 Cashier Profiles\",\"included\":true},{\"text\":\"Unlimited GST Invoices\",\"included\":true},{\"text\":\"Auto WhatsApp Webhooks\",\"included\":true},{\"text\":\"Stock Warning Alerts\",\"included\":true},{\"text\":\"Dedicated Database Node\",\"included\":false}]",
+                    IsActive = true
+                },
+                new SubscriptionPlan
+                {
+                    Id = 3,
+                    Name = "Enterprise Plan",
+                    Subtitle = "For large chains with dedicated needs",
+                    RazorpayPlanIdMonthly = "plan_enterprise_monthly",
+                    RazorpayPlanIdYearly = "plan_enterprise_yearly",
+                    MonthlyPrice = 4999.00m,
+                    YearlyPrice = 49990.00m,
+                    MaxBranches = -1,
+                    MaxStaff = 999,
+                    IsPopular = false,
+                    DisplayOrder = 3,
+                    FeaturesJson = "[{\"text\":\"Unlimited Branches & Cashiers\",\"included\":true},{\"text\":\"Dedicated Database Cluster\",\"included\":true},{\"text\":\"Custom PDF Invoice Templates\",\"included\":true},{\"text\":\"SMS + WhatsApp Gateway Sync\",\"included\":true},{\"text\":\"24/7 Priority Dedicated Manager\",\"included\":true},{\"text\":\"API Integrations & Webhooks\",\"included\":true}]",
+                    IsActive = true
+                }
             );
+
+            // ===== Seed AppFeatures =====
+            modelBuilder.Entity<AppFeature>().HasData(
+                new AppFeature { Id = 1, FeatureKey = "dashboard", DisplayName = "Dashboard", Description = "Main dashboard overview", Category = "Core" },
+                new AppFeature { Id = 2, FeatureKey = "billing", DisplayName = "Billing & Invoicing", Description = "Create new bills and invoices", Category = "Core" },
+                new AppFeature { Id = 3, FeatureKey = "invoices", DisplayName = "Invoice History", Description = "View and manage past invoices", Category = "Core" },
+                new AppFeature { Id = 4, FeatureKey = "customers", DisplayName = "Customer Management", Description = "CRM customer directory", Category = "Core" },
+                new AppFeature { Id = 5, FeatureKey = "services", DisplayName = "Service Catalog", Description = "Manage service listings", Category = "Core" },
+                new AppFeature { Id = 6, FeatureKey = "inventory", DisplayName = "Inventory & Stock", Description = "Product stock management", Category = "Standard" },
+                new AppFeature { Id = 7, FeatureKey = "reports", DisplayName = "GST Reports", Description = "Tax and sales reports", Category = "Standard" },
+                new AppFeature { Id = 8, FeatureKey = "staff_manage", DisplayName = "Staff Management", Description = "Manage staff members and roles", Category = "Standard" },
+                new AppFeature { Id = 9, FeatureKey = "branches", DisplayName = "Multi-Branch Sync", Description = "Multi-location branch management", Category = "Advanced" },
+                new AppFeature { Id = 10, FeatureKey = "expenses", DisplayName = "Expense Tracking", Description = "Track business expenses", Category = "Standard" },
+                new AppFeature { Id = 11, FeatureKey = "settings", DisplayName = "Business Settings", Description = "Configure business preferences", Category = "Core" },
+                new AppFeature { Id = 12, FeatureKey = "whatsapp", DisplayName = "WhatsApp Integration", Description = "WhatsApp messaging webhooks", Category = "Advanced" },
+                new AppFeature { Id = 13, FeatureKey = "purchases", DisplayName = "Purchase Management", Description = "Track supplier purchases", Category = "Standard" },
+                new AppFeature { Id = 14, FeatureKey = "custom_templates", DisplayName = "Custom Invoice Templates", Description = "Custom PDF invoice designs", Category = "Premium" },
+                new AppFeature { Id = 15, FeatureKey = "api_webhooks", DisplayName = "API & Webhook Access", Description = "External API integrations", Category = "Premium" },
+                new AppFeature { Id = 16, FeatureKey = "dedicated_db", DisplayName = "Dedicated Database", Description = "Dedicated database cluster", Category = "Premium" }
+            );
+
+            // ===== Seed PlanFeatures (Plan → Feature mapping) =====
+            // Starter Plan (Id=1): Core + Standard features, no Advanced/Premium
+            // Growth Plan (Id=2): Core + Standard + Advanced, no Premium
+            // Enterprise Plan (Id=3): Everything enabled
+            var planFeatureId = 0;
+            var planFeatureList = new List<PlanFeature>();
+            int[] allFeatureIds = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+            int[] starterEnabled = { 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13 }; // No branches(9), whatsapp(12), custom_templates(14), api_webhooks(15), dedicated_db(16)
+            int[] growthEnabled = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }; // No custom_templates(14), api_webhooks(15), dedicated_db(16)
+
+            foreach (var fid in allFeatureIds)
+            {
+                // Starter
+                planFeatureList.Add(new PlanFeature { Id = ++planFeatureId, PlanId = 1, FeatureId = fid, IsEnabled = Array.Exists(starterEnabled, x => x == fid) });
+                // Growth
+                planFeatureList.Add(new PlanFeature { Id = ++planFeatureId, PlanId = 2, FeatureId = fid, IsEnabled = Array.Exists(growthEnabled, x => x == fid) });
+                // Enterprise - all enabled
+                planFeatureList.Add(new PlanFeature { Id = ++planFeatureId, PlanId = 3, FeatureId = fid, IsEnabled = true });
+            }
+            modelBuilder.Entity<PlanFeature>().HasData(planFeatureList.ToArray());
+
+            // ===== Seed RoleFeatures (Role → Feature mapping) =====
+            // Owner: full access to business features
+            // Staff: billing, invoices, customers, services only
+            // SuperAdmin: dashboard + reports only (system-level access)
+            var roleFeatureId = 0;
+            var roleFeatureList = new List<RoleFeature>();
+            int[] ownerEnabled = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }; // All
+            int[] staffEnabled = { 1, 2, 3, 4, 5 }; // dashboard, billing, invoices, customers, services
+            int[] superAdminEnabled = { 1, 7 }; // dashboard, reports
+
+            foreach (var fid in allFeatureIds)
+            {
+                roleFeatureList.Add(new RoleFeature { Id = ++roleFeatureId, RoleName = "Owner", FeatureId = fid, IsEnabled = Array.Exists(ownerEnabled, x => x == fid) });
+                roleFeatureList.Add(new RoleFeature { Id = ++roleFeatureId, RoleName = "Staff", FeatureId = fid, IsEnabled = Array.Exists(staffEnabled, x => x == fid) });
+                roleFeatureList.Add(new RoleFeature { Id = ++roleFeatureId, RoleName = "SuperAdmin", FeatureId = fid, IsEnabled = Array.Exists(superAdminEnabled, x => x == fid) });
+            }
+
+            modelBuilder.Entity<RoleFeature>().HasData(roleFeatureList.ToArray());
 
             // ===== Seed Tax Categories =====
             modelBuilder.Entity<TaxCategory>().HasData(

@@ -1,6 +1,8 @@
 using System;
 using System.Data;
+using System.Linq;
 using BillingBackend.Data;
+using BillingBackend.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -233,18 +235,150 @@ namespace BillingBackend.Extensions
                 AddColumnIfNotExists(context, "PurchaseItems", "UnitPrice", "DECIMAL(18,2) DEFAULT 0 NOT NULL");
                 AddColumnIfNotExists(context, "PurchaseItems", "LineTotal", "DECIMAL(18,2) DEFAULT 0 NOT NULL");
 
-                // Seed SubscriptionPlans if table exists but empty
-                context.Database.ExecuteSqlRaw(@"
+                // Ensure Columns on SubscriptionPlans table
+                AddColumnIfNotExists(context, "SubscriptionPlans", "Subtitle", "NVARCHAR(200) NULL");
+                AddColumnIfNotExists(context, "SubscriptionPlans", "IsPopular", "BIT DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "SubscriptionPlans", "DisplayOrder", "INT DEFAULT 1 NOT NULL");
+                AddColumnIfNotExists(context, "SubscriptionPlans", "FeaturesJson", "NVARCHAR(MAX) NULL");
+
+                // Unconditionally UPDATE SubscriptionPlans rows 1, 2, and 3 in SQL Server
+                ExecuteRawSqlDirect(context, """
                     IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'SubscriptionPlans')
-                    AND NOT EXISTS (SELECT 1 FROM [SubscriptionPlans])
                     BEGIN
-                        SET IDENTITY_INSERT [SubscriptionPlans] ON;
-                        INSERT INTO [SubscriptionPlans] ([Id], [Name], [RazorpayPlanIdMonthly], [RazorpayPlanIdYearly], [MonthlyPrice], [YearlyPrice], [MaxBranches], [MaxStaff], [IsActive])
-                        VALUES 
-                        (1, 'Starter Plan', 'plan_starter_monthly', 'plan_starter_yearly', 499.00, 4999.00, 1, 2, 1),
-                        (2, 'Growth Plan', 'plan_growth_monthly', 'plan_growth_yearly', 1499.00, 14990.00, 5, 10, 1),
-                        (3, 'Enterprise Plan', 'plan_enterprise_monthly', 'plan_enterprise_yearly', 4999.00, 49990.00, 99, 999, 1);
-                        SET IDENTITY_INSERT [SubscriptionPlans] OFF;
+                        UPDATE [SubscriptionPlans]
+                        SET [Subtitle] = 'For single cash register outlets',
+                            [IsPopular] = 0,
+                            [DisplayOrder] = 1,
+                            [FeaturesJson] = '[{"text":"1 Branch & 2 Cashier Profiles","included":true},{"text":"GST & Non-GST Invoicing","included":true},{"text":"CRM Customer Directory","included":true},{"text":"SMS Invoice Dispatches","included":true},{"text":"Auto WhatsApp Webhooks","included":false},{"text":"Multi-Branch Syncing","included":false}]'
+                        WHERE [Id] = 1 OR [Name] LIKE '%Starter%';
+
+                        UPDATE [SubscriptionPlans]
+                        SET [Subtitle] = 'Best for expanding retail franchises',
+                            [IsPopular] = 1,
+                            [DisplayOrder] = 2,
+                            [FeaturesJson] = '[{"text":"Up to 5 Branches Syncing","included":true},{"text":"Up to 10 Cashier Profiles","included":true},{"text":"Unlimited GST Invoices","included":true},{"text":"Auto WhatsApp Webhooks","included":true},{"text":"Stock Warning Alerts","included":true},{"text":"Dedicated Database Node","included":false}]'
+                        WHERE [Id] = 2 OR [Name] LIKE '%Growth%';
+
+                        UPDATE [SubscriptionPlans]
+                        SET [Subtitle] = 'For large chains with dedicated needs',
+                            [IsPopular] = 0,
+                            [DisplayOrder] = 3,
+                            [FeaturesJson] = '[{"text":"Unlimited Branches & Cashiers","included":true},{"text":"Dedicated Database Cluster","included":true},{"text":"Custom PDF Invoice Templates","included":true},{"text":"SMS + WhatsApp Gateway Sync","included":true},{"text":"24/7 Priority Dedicated Manager","included":true},{"text":"API Integrations & Webhooks","included":true}]'
+                        WHERE [Id] = 3 OR [Name] LIKE '%Enterprise%';
+                    END
+                """);
+
+                // ===== AppFeatures Table =====
+                context.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'AppFeatures')
+                    BEGIN
+                        CREATE TABLE [AppFeatures] (
+                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                            [FeatureKey] NVARCHAR(100) NOT NULL,
+                            [DisplayName] NVARCHAR(200) NOT NULL,
+                            [Description] NVARCHAR(500) NULL,
+                            [Category] NVARCHAR(50) NOT NULL DEFAULT 'Core',
+                            [IsActive] BIT NOT NULL DEFAULT 1,
+                            CONSTRAINT [UQ_AppFeatures_FeatureKey] UNIQUE ([FeatureKey])
+                        );
+                    END
+                ");
+
+                // ===== PlanFeatures Table =====
+                context.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'PlanFeatures')
+                    BEGIN
+                        CREATE TABLE [PlanFeatures] (
+                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                            [PlanId] INT NOT NULL,
+                            [FeatureId] INT NOT NULL,
+                            [IsEnabled] BIT NOT NULL DEFAULT 1,
+                            CONSTRAINT [FK_PlanFeatures_Plans] FOREIGN KEY ([PlanId]) REFERENCES [SubscriptionPlans]([Id]) ON DELETE CASCADE,
+                            CONSTRAINT [FK_PlanFeatures_Features] FOREIGN KEY ([FeatureId]) REFERENCES [AppFeatures]([Id]) ON DELETE CASCADE,
+                            CONSTRAINT [UQ_PlanFeatures_PlanId_FeatureId] UNIQUE ([PlanId], [FeatureId])
+                        );
+                    END
+                ");
+
+                // ===== RoleFeatures Table =====
+                context.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'RoleFeatures')
+                    BEGIN
+                        CREATE TABLE [RoleFeatures] (
+                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                            [RoleName] NVARCHAR(50) NOT NULL,
+                            [FeatureId] INT NOT NULL,
+                            [IsEnabled] BIT NOT NULL DEFAULT 1,
+                            CONSTRAINT [FK_RoleFeatures_Features] FOREIGN KEY ([FeatureId]) REFERENCES [AppFeatures]([Id]) ON DELETE CASCADE,
+                            CONSTRAINT [UQ_RoleFeatures_RoleName_FeatureId] UNIQUE ([RoleName], [FeatureId])
+                        );
+                    END
+                ");
+
+                // ===== Seed AppFeatures =====
+                context.Database.ExecuteSqlRaw(@"
+                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'AppFeatures')
+                    AND NOT EXISTS (SELECT 1 FROM [AppFeatures])
+                    BEGIN
+                        SET IDENTITY_INSERT [AppFeatures] ON;
+                        INSERT INTO [AppFeatures] ([Id], [FeatureKey], [DisplayName], [Description], [Category], [IsActive]) VALUES
+                        (1, 'dashboard', 'Dashboard', 'Main dashboard overview', 'Core', 1),
+                        (2, 'billing', 'Billing & Invoicing', 'Create new bills and invoices', 'Core', 1),
+                        (3, 'invoices', 'Invoice History', 'View and manage past invoices', 'Core', 1),
+                        (4, 'customers', 'Customer Management', 'CRM customer directory', 'Core', 1),
+                        (5, 'services', 'Service Catalog', 'Manage service listings', 'Core', 1),
+                        (6, 'inventory', 'Inventory & Stock', 'Product stock management', 'Standard', 1),
+                        (7, 'reports', 'GST Reports', 'Tax and sales reports', 'Standard', 1),
+                        (8, 'staff_manage', 'Staff Management', 'Manage staff members and roles', 'Standard', 1),
+                        (9, 'branches', 'Multi-Branch Sync', 'Multi-location branch management', 'Advanced', 1),
+                        (10, 'expenses', 'Expense Tracking', 'Track business expenses', 'Standard', 1),
+                        (11, 'settings', 'Business Settings', 'Configure business preferences', 'Core', 1),
+                        (12, 'whatsapp', 'WhatsApp Integration', 'WhatsApp messaging webhooks', 'Advanced', 1),
+                        (13, 'purchases', 'Purchase Management', 'Track supplier purchases', 'Standard', 1),
+                        (14, 'custom_templates', 'Custom Invoice Templates', 'Custom PDF invoice designs', 'Premium', 1),
+                        (15, 'api_webhooks', 'API & Webhook Access', 'External API integrations', 'Premium', 1),
+                        (16, 'dedicated_db', 'Dedicated Database', 'Dedicated database cluster', 'Premium', 1);
+                        SET IDENTITY_INSERT [AppFeatures] OFF;
+                    END
+                ");
+
+                // ===== Seed PlanFeatures =====
+                context.Database.ExecuteSqlRaw(@"
+                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'PlanFeatures')
+                    AND NOT EXISTS (SELECT 1 FROM [PlanFeatures])
+                    AND EXISTS (SELECT 1 FROM [AppFeatures])
+                    BEGIN
+                        -- Starter Plan (1): Core + Standard, no Advanced/Premium
+                        INSERT INTO [PlanFeatures] ([PlanId], [FeatureId], [IsEnabled])
+                        SELECT 1, [Id], CASE WHEN [Category] IN ('Core', 'Standard') THEN 1 ELSE 0 END FROM [AppFeatures];
+
+                        -- Growth Plan (2): Core + Standard + Advanced, no Premium
+                        INSERT INTO [PlanFeatures] ([PlanId], [FeatureId], [IsEnabled])
+                        SELECT 2, [Id], CASE WHEN [Category] IN ('Core', 'Standard', 'Advanced') THEN 1 ELSE 0 END FROM [AppFeatures];
+
+                        -- Enterprise Plan (3): Everything enabled
+                        INSERT INTO [PlanFeatures] ([PlanId], [FeatureId], [IsEnabled])
+                        SELECT 3, [Id], 1 FROM [AppFeatures];
+                    END
+                ");
+
+                // ===== Seed RoleFeatures =====
+                context.Database.ExecuteSqlRaw(@"
+                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'RoleFeatures')
+                    AND NOT EXISTS (SELECT 1 FROM [RoleFeatures])
+                    AND EXISTS (SELECT 1 FROM [AppFeatures])
+                    BEGIN
+                        -- Owner: all features enabled
+                        INSERT INTO [RoleFeatures] ([RoleName], [FeatureId], [IsEnabled])
+                        SELECT 'Owner', [Id], 1 FROM [AppFeatures];
+
+                        -- Staff: only dashboard, billing, invoices, customers, services
+                        INSERT INTO [RoleFeatures] ([RoleName], [FeatureId], [IsEnabled])
+                        SELECT 'Staff', [Id], CASE WHEN [FeatureKey] IN ('dashboard', 'billing', 'invoices', 'customers', 'services') THEN 1 ELSE 0 END FROM [AppFeatures];
+
+                        -- SuperAdmin: only dashboard and reports
+                        INSERT INTO [RoleFeatures] ([RoleName], [FeatureId], [IsEnabled])
+                        SELECT 'SuperAdmin', [Id], CASE WHEN [FeatureKey] IN ('dashboard', 'reports') THEN 1 ELSE 0 END FROM [AppFeatures];
                     END
                 ");
 
@@ -295,6 +429,27 @@ namespace BillingBackend.Extensions
             try
             {
                 context.Database.ExecuteSqlRaw(sql);
+            }
+            catch { /* ignore */ }
+        }
+
+        private static void ExecuteRawSqlDirect(BillingDbContext context, string sql)
+        {
+            try
+            {
+                var conn = context.Database.GetDbConnection();
+                bool isClosed = conn.State != ConnectionState.Open;
+                if (isClosed) conn.Open();
+                try
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    cmd.ExecuteNonQuery();
+                }
+                finally
+                {
+                    if (isClosed) conn.Close();
+                }
             }
             catch { /* ignore */ }
         }

@@ -15,11 +15,13 @@ namespace BillingBackend.Services
     {
         private readonly BillingDbContext _context;
         private readonly ILogger<BusinessConfigurationService> _logger;
+        private readonly IFeatureService _featureService;
 
-        public BusinessConfigurationService(BillingDbContext context, ILogger<BusinessConfigurationService> logger)
+        public BusinessConfigurationService(BillingDbContext context, ILogger<BusinessConfigurationService> logger, IFeatureService featureService)
         {
             _context = context;
             _logger = logger;
+            _featureService = featureService;
         }
 
         private BusinessTypePresetDto MapEntityToDto(BusinessTypeMaster entity)
@@ -402,6 +404,42 @@ namespace BillingBackend.Services
                 CompletedSetupSteps = completedSteps,
                 PendingSetupSteps = pendingSteps
             };
+        }
+
+        public async Task<BusinessConfigDto> GetConfigurationAsync(int businessId, string userRole)
+        {
+            // Get the base configuration (business-type features, terminology, etc.)
+            var config = await GetConfigurationAsync(businessId);
+
+            // Look up the business's active subscription plan
+            var business = await _context.Businesses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.Id == businessId);
+
+            if (business != null)
+            {
+                // Resolve plan + role features from DB
+                var resolvedFeatures = await _featureService.GetResolvedFeaturesAsync(business.ActivePlanId, userRole);
+
+                // Merge: a feature is enabled only when BOTH the business-type allows it AND the plan+role allows it
+                var mergedFeatures = new Dictionary<string, bool>(config.Features);
+                foreach (var kv in resolvedFeatures)
+                {
+                    if (mergedFeatures.ContainsKey(kv.Key))
+                    {
+                        // AND with existing business-type feature
+                        mergedFeatures[kv.Key] = mergedFeatures[kv.Key] && kv.Value;
+                    }
+                    else
+                    {
+                        // New feature key from AppFeatures table
+                        mergedFeatures[kv.Key] = kv.Value;
+                    }
+                }
+                config.Features = mergedFeatures;
+            }
+
+            return config;
         }
 
         public async Task<BusinessConfigDto> UpdateConfigurationAsync(int businessId, UpdateBusinessConfigDto dto)
