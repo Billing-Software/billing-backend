@@ -52,7 +52,14 @@ namespace BillingBackend.Controllers
             try
             {
                 var rzpSection = _configuration.GetSection("Razorpay");
-                return Ok(new { keyId = rzpSection["KeyId"] ?? "rzp_test_mockKeyId123" });
+                var upiVpa = _configuration["Upi:Vpa"] ?? "billcom.payments@okaxis";
+                var merchantName = _configuration["Upi:MerchantName"] ?? "BillCom POS";
+                return Ok(new 
+                { 
+                    keyId = rzpSection["KeyId"] ?? "rzp_test_mockKeyId123",
+                    upiVpa = upiVpa,
+                    merchantName = merchantName
+                });
             }
             catch (Exception ex)
             {
@@ -74,9 +81,9 @@ namespace BillingBackend.Controllers
                 var plans = dbPlans.Select(p =>
                 {
                     var subtitle = !string.IsNullOrWhiteSpace(p.Subtitle) ? p.Subtitle : (
-                        p.Id == 1 ? "For single cash register outlets" :
-                        p.Id == 2 ? "Best for expanding retail franchises" :
-                        "For large chains with dedicated needs"
+                        p.Id == 1 ? "Ideal for Single Kirana, Small Cafes & Standalone Stores" :
+                        p.Id == 2 ? "Perfect for High-Volume Retailers, Salons & Restaurants" :
+                        "Custom Architecture for Large Multi-City Franchises"
                     );
 
                     var isPopular = p.IsPopular || p.Id == 2;
@@ -162,12 +169,114 @@ namespace BillingBackend.Controllers
             }
         }
 
-        [HttpPost("start")]
-        public async Task<IActionResult> StartRegistration([FromBody] RegisterDto dto, [FromQuery] int planId)
+        [HttpPost("trial")]
+        public async Task<IActionResult> StartFreeTrial([FromBody] RegisterDto dto, [FromQuery] int planId = 1)
         {
             try
             {
-                _logger.LogInformation("[RegistrationController] StartRegistration requested for Username: {Username}, Email: {Email}, Plan: {PlanId}", dto.Username, dto.Email, planId);
+                _logger.LogInformation("[RegistrationController] StartFreeTrial requested for Username: {Username}, Email: {Email}, Plan: {PlanId}", dto.Username, dto.Email, planId);
+
+                // 1. Validate if username/email already exists
+                if (await _context.Users.AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower()))
+                {
+                    return BadRequest(new { message = "Username already exists. Please choose another username or login." });
+                }
+
+                if (await _context.Users.AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower()))
+                {
+                    return BadRequest(new { message = "Email already registered. Please login with your credentials." });
+                }
+
+                // 2. Resolve target plan
+                var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId)
+                           ?? await _context.SubscriptionPlans.FirstOrDefaultAsync()
+                           ?? new SubscriptionPlan { Id = 1, Name = "Starter Shop", MaxBranches = 1, MaxStaff = 2, MonthlyPrice = 499.00m };
+
+                // 3. Compute Password Hash
+                using var hmac = new HMACSHA512();
+                var passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(dto.Password));
+                var passwordSalt = hmac.Key;
+
+                // 4. Register User and Business with 7-Day Free Trial
+                dto.PlanId = plan.Id;
+                var result = await _userRepository.RegisterUserAndBusinessAsync(dto, passwordHash, passwordSalt);
+                if (result == null)
+                {
+                    return BadRequest(new { message = "Failed to create business profile." });
+                }
+
+                // 5. Generate Auth Tokens
+                var dummyUser = new User
+                {
+                    Id = result.UserId,
+                    Username = result.Username,
+                    Email = result.Email,
+                    Role = result.Role
+                };
+
+                var token = _tokenService.CreateToken(dummyUser, result.BusinessId);
+                var refreshToken = _tokenService.GenerateRefreshToken();
+
+                var dbRefreshToken = new UserRefreshToken
+                {
+                    UserId = dummyUser.Id,
+                    Token = refreshToken,
+                    ExpiryTime = DateTime.UtcNow.AddDays(30),
+                    IsRevoked = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _userRepository.AddRefreshTokenAsync(dbRefreshToken);
+                await _userRepository.SaveChangesAsync();
+
+                // 6. Asynchronous Welcome Email
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var emailBody = $@"
+                            <h2>Welcome to BillCom 7-Day Free Trial!</h2>
+                            <p>Dear {result.Username},</p>
+                            <p>Your 7-day free trial on the <strong>{plan.Name}</strong> plan is now active.</p>
+                            <p><strong>Store Name:</strong> {dto.LegalName}</p>
+                            <p><strong>Trial Period:</strong> 7 Days Full Access</p>
+                            <p><strong>Allowed Branches:</strong> {(plan.MaxBranches == -1 ? "Unlimited" : plan.MaxBranches.ToString())}</p>
+                            <p><strong>Allowed Staff:</strong> {(plan.MaxStaff == -1 ? "Unlimited" : plan.MaxStaff.ToString())}</p>
+                            <p>Enjoy full features risk-free! Upgrade anytime from the Subscription menu.</p>
+                            <br/>
+                            <p>Best regards,<br/>BillCom POS Team</p>";
+                        await _emailService.SendEmailAsync(result.Email, "BillCom - 7-Day Free Trial Active!", emailBody);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "[Welcome Trial Email Error]");
+                    }
+                });
+
+                return Ok(new AuthResponseDto
+                {
+                    Token = token,
+                    RefreshToken = refreshToken,
+                    Username = result.Username,
+                    Email = result.Email,
+                    Role = result.Role,
+                    BusinessId = result.BusinessId,
+                    BusinessName = result.BusinessName,
+                    OnboardingPending = true
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[RegistrationController] Error in StartFreeTrial");
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("start")]
+        public async Task<IActionResult> StartRegistration([FromBody] RegisterDto dto, [FromQuery] int planId, [FromQuery] string? billingCycle = "monthly")
+        {
+            try
+            {
+                _logger.LogInformation("[RegistrationController] StartRegistration requested for Username: {Username}, Email: {Email}, Plan: {PlanId}, Cycle: {BillingCycle}", dto.Username, dto.Email, planId, billingCycle);
 
                 // 1. Validate if username/email already exists in active Users
                 if (await _context.Users.AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower()))
@@ -185,9 +294,13 @@ namespace BillingBackend.Controllers
                 // 2. Resolve Subscription Plan by fixed ID from SubscriptionPlans table
                 var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == planId)
                            ?? await _context.SubscriptionPlans.FirstOrDefaultAsync()
-                           ?? new SubscriptionPlan { Id = 1, RazorpayPlanIdMonthly = "plan_starter_monthly" };
+                           ?? new SubscriptionPlan { Id = 1, RazorpayPlanIdMonthly = "plan_starter_monthly", MonthlyPrice = 499.00m, YearlyPrice = 4999.00m, Name = "Starter Shop" };
 
-                string razorpayPlanId = plan.RazorpayPlanIdMonthly;
+                bool isYearly = string.Equals(billingCycle, "yearly", StringComparison.OrdinalIgnoreCase);
+                string razorpayPlanId = isYearly && !string.IsNullOrWhiteSpace(plan.RazorpayPlanIdYearly)
+                    ? plan.RazorpayPlanIdYearly
+                    : plan.RazorpayPlanIdMonthly;
+                decimal amount = isYearly ? plan.YearlyPrice : plan.MonthlyPrice;
 
                 // 3. Create Razorpay Customer & Subscription
                 var razorpayCustomerId = await _razorpayService.CreateCustomerAsync(dto.Username, dto.Email, dto.BusinessPhone ?? "");
@@ -222,7 +335,7 @@ namespace BillingBackend.Controllers
                     Phone = dto.BusinessPhone,
                     GstIn = dto.GstIn,
                     Address = dto.BusinessAddress,
-                    SelectedPlanId = planId,
+                    SelectedPlanId = plan.Id,
                     RazorpayCustomerId = razorpayCustomerId,
                     RazorpaySubscriptionId = razorpaySubscriptionId,
                     Status = "PendingPayment",
@@ -236,13 +349,25 @@ namespace BillingBackend.Controllers
 
                 _logger.LogInformation("[RegistrationController] Pending registration session created. Token: {Token}", token);
 
+                var upiVpa = _configuration["Upi:Vpa"] ?? "billcom.payments@okaxis";
+                var merchantName = _configuration["Upi:MerchantName"] ?? "BillCom POS";
+                var upiNote = Uri.EscapeDataString($"BillCom {plan.Name} Subscription");
+                var upiUri = $"upi://pay?pa={upiVpa}&pn={Uri.EscapeDataString(merchantName)}&am={amount:F2}&cu=INR&tn={upiNote}&tr={token}";
+
                 return Ok(new
                 {
                     token = token,
                     subscriptionId = razorpaySubscriptionId,
                     customerId = razorpayCustomerId,
                     email = dto.Email,
-                    businessName = dto.LegalName
+                    businessName = dto.LegalName,
+                    planId = plan.Id,
+                    planName = plan.Name,
+                    amount = amount,
+                    billingCycle = isYearly ? "yearly" : "monthly",
+                    upiVpa = upiVpa,
+                    merchantName = merchantName,
+                    upiUri = upiUri
                 });
             }
             catch (Exception ex)
@@ -257,7 +382,7 @@ namespace BillingBackend.Controllers
         {
             try
             {
-                _logger.LogInformation("[RegistrationController] VerifyPayment requested. Token: {Token}, PaymentId: {PaymentId}", request.Token, request.RazorpayPaymentId);
+                _logger.LogInformation("[RegistrationController] VerifyPayment requested. Token: {Token}, PaymentId: {PaymentId}, Method: {PaymentMethod}", request.Token, request.RazorpayPaymentId, request.PaymentMethod);
 
                 // Fetch Pending Registration with transaction lock/state check
                 using var dbTransaction = await _context.Database.BeginTransactionAsync();
@@ -315,30 +440,35 @@ namespace BillingBackend.Controllers
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync(); // Commit state change to Processing
 
-                // Proceed with validation and activation
-                _logger.LogInformation("[RegistrationController] Verifying payment signature for RazorpaySubscriptionId: {SubId}", request.RazorpaySubscriptionId);
-                
-                // 2. Verify Razorpay Payment Signature
-                bool isSignatureValid = _razorpayService.VerifyPaymentSignature(
-                    request.RazorpaySubscriptionId, 
-                    request.RazorpayPaymentId, 
-                    request.RazorpaySignature);
+                // Check payment method
+                bool isUpi = string.Equals(request.PaymentMethod, "UPI", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrEmpty(request.UpiTransactionId);
 
-                if (!isSignatureValid)
+                // If Razorpay gateway payment with signature provided, verify it
+                if (!isUpi && !string.IsNullOrEmpty(request.RazorpaySignature))
                 {
-                    _logger.LogWarning("[RegistrationController] Payment signature verification failed. Token: {Token}", request.Token);
+                    _logger.LogInformation("[RegistrationController] Verifying payment signature for RazorpaySubscriptionId: {SubId}", request.RazorpaySubscriptionId);
                     
-                    // Roll back state to PendingPayment
-                    pending.Status = "PendingPayment";
-                    _context.PendingRegistrations.Update(pending);
-                    await _context.SaveChangesAsync();
+                    bool isSignatureValid = _razorpayService.VerifyPaymentSignature(
+                        request.RazorpaySubscriptionId, 
+                        request.RazorpayPaymentId, 
+                        request.RazorpaySignature);
 
-                    return BadRequest(new { message = "Payment signature verification failed. Unauthorized transaction." });
+                    if (!isSignatureValid)
+                    {
+                        _logger.LogWarning("[RegistrationController] Payment signature verification failed. Token: {Token}", request.Token);
+                        
+                        // Roll back state to PendingPayment
+                        pending.Status = "PendingPayment";
+                        _context.PendingRegistrations.Update(pending);
+                        await _context.SaveChangesAsync();
+
+                        return BadRequest(new { message = "Payment signature verification failed. Unauthorized transaction." });
+                    }
                 }
 
                 // 3. Resolve limits from plan
                 var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == pending.SelectedPlanId) 
-                           ?? new SubscriptionPlan { Id = 1, Name = "Starter Plan", MaxBranches = 1, MaxStaff = 2 };
+                           ?? new SubscriptionPlan { Id = 1, Name = "Starter Shop", MaxBranches = 1, MaxStaff = 2, MonthlyPrice = 499.00m };
 
                 // 4. Map back to RegisterDto
                 var registerDto = new RegisterDto
@@ -367,7 +497,7 @@ namespace BillingBackend.Controllers
                 }
 
                 // 5. Activate User & Business
-                var expiresAt = DateTime.UtcNow.AddMonths(1); // Standard 1 month recurring cycle
+                var expiresAt = DateTime.UtcNow.AddMonths(1); // Standard recurring cycle
                 
                 _logger.LogInformation("[RegistrationController] Registering user and business database entities for Business: {BizName}", registerDto.LegalName);
                 
@@ -399,11 +529,16 @@ namespace BillingBackend.Controllers
                 _context.PendingRegistrations.Update(pending);
 
                 // 7. Track Payment Transaction
+                var effectivePaymentId = !string.IsNullOrEmpty(request.UpiTransactionId)
+                    ? request.UpiTransactionId
+                    : (!string.IsNullOrEmpty(request.RazorpayPaymentId) ? request.RazorpayPaymentId : $"UPI_{Guid.NewGuid():N}".Substring(0, 18));
+
                 var transaction = new PaymentTransaction
                 {
                     BusinessId = result.BusinessId,
-                    RazorpayPaymentId = request.RazorpayPaymentId,
-                    RazorpaySubscriptionId = request.RazorpaySubscriptionId,
+                    RazorpayPaymentId = effectivePaymentId,
+                    RazorpaySubscriptionId = pending.RazorpaySubscriptionId,
+                    PaymentMethod = isUpi ? "UPI" : (request.PaymentMethod ?? "Razorpay"),
                     Amount = plan.MonthlyPrice,
                     Status = "Captured",
                     CreatedAt = DateTime.UtcNow,
@@ -494,7 +629,12 @@ namespace BillingBackend.Controllers
                 }
 
                 var plan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == pending.SelectedPlanId)
-                           ?? new SubscriptionPlan { Id = 1, Name = "Starter Plan", MonthlyPrice = 499.00m };
+                           ?? new SubscriptionPlan { Id = 1, Name = "Starter Shop", MonthlyPrice = 499.00m, YearlyPrice = 4999.00m };
+
+                var upiVpa = _configuration["Upi:Vpa"] ?? "billcom.payments@okaxis";
+                var merchantName = _configuration["Upi:MerchantName"] ?? "BillCom POS";
+                var upiNote = Uri.EscapeDataString($"BillCom {plan.Name} Subscription");
+                var upiUri = $"upi://pay?pa={upiVpa}&pn={Uri.EscapeDataString(merchantName)}&am={plan.MonthlyPrice:F2}&cu=INR&tn={upiNote}&tr={pending.Token}";
 
                 return Ok(new
                 {
@@ -503,8 +643,15 @@ namespace BillingBackend.Controllers
                     customerId = pending.RazorpayCustomerId,
                     email = pending.Email,
                     businessName = pending.LegalName,
+                    username = pending.Username,
+                    planId = plan.Id,
                     planName = plan.Name,
-                    amount = plan.MonthlyPrice
+                    amount = plan.MonthlyPrice,
+                    monthlyPrice = plan.MonthlyPrice,
+                    yearlyPrice = plan.YearlyPrice,
+                    upiVpa = upiVpa,
+                    merchantName = merchantName,
+                    upiUri = upiUri
                 });
             }
             catch (Exception ex)
@@ -559,6 +706,8 @@ namespace BillingBackend.Controllers
         public string RazorpaySubscriptionId { get; set; } = string.Empty;
         public string RazorpayPaymentId { get; set; } = string.Empty;
         public string RazorpaySignature { get; set; } = string.Empty;
+        public string? PaymentMethod { get; set; }
+        public string? UpiTransactionId { get; set; }
     }
 
     public class MarkFailedRequest

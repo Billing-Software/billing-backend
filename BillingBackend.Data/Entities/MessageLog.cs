@@ -38,6 +38,30 @@ namespace BillingBackend.Data.Entities
         public string? MetaMessageId { get; set; }
 
         /// <summary>
+        /// Twilio Message SID (SM... or MM...).
+        /// </summary>
+        [MaxLength(200)]
+        public string? TwilioMessageSid { get; set; }
+
+        /// <summary>
+        /// Provider name: Twilio
+        /// </summary>
+        [MaxLength(50)]
+        public string Provider { get; set; } = "Twilio";
+
+        /// <summary>
+        /// Template name used for dispatch (e.g. billcom_invoice_v1).
+        /// </summary>
+        [MaxLength(100)]
+        public string? TemplateName { get; set; }
+
+        /// <summary>
+        /// Media attachment URL (PDF invoice URL).
+        /// </summary>
+        [MaxLength(1000)]
+        public string? MediaUrl { get; set; }
+
+        /// <summary>
         /// Status: Queued, Sent, Delivered, Read, Failed.
         /// </summary>
         [Required]
@@ -50,8 +74,16 @@ namespace BillingBackend.Data.Entities
 
         public DateTime? ReadAt { get; set; }
 
+        [MaxLength(50)]
+        public string? ErrorCode { get; set; }
+
+        [MaxLength(500)]
+        public string? ErrorMessage { get; set; }
+
         [MaxLength(500)]
         public string? FailedReason { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation
         [ForeignKey(nameof(WhatsAppAccountId))]

@@ -97,6 +97,233 @@ namespace BillingBackend.Extensions
                         [CreatedAt] DATETIME2 NOT NULL
                     )");
 
+                CreateTableIfNotExists(context, "BusinessSmsSettings", @"
+                    CREATE TABLE [BusinessSmsSettings] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [Provider] NVARCHAR(50) DEFAULT 'Exotel' NOT NULL,
+                        [SenderId] NVARCHAR(10) NOT NULL,
+                        [DltEntityId] NVARCHAR(50) NOT NULL,
+                        [InvoiceTemplateId] NVARCHAR(50) NOT NULL,
+                        [TemplateBody] NVARCHAR(500),
+                        [IsActive] BIT DEFAULT 1 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "BusinessPaymentSettings", @"
+                    CREATE TABLE [BusinessPaymentSettings] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL UNIQUE REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [BankName] NVARCHAR(100),
+                        [AccountHolderName] NVARCHAR(150),
+                        [AccountNumber] NVARCHAR(50),
+                        [IfscCode] NVARCHAR(20),
+                        [BranchName] NVARCHAR(100),
+                        [UpiVpa] NVARCHAR(100),
+                        [ShowUpiQrOnInvoice] BIT DEFAULT 1 NOT NULL,
+                        [ShowBankDetailsOnInvoice] BIT DEFAULT 0 NOT NULL,
+                        [PaymentGatewayProvider] NVARCHAR(50) DEFAULT 'None' NOT NULL,
+                        [PaymentGatewayApiKey] NVARCHAR(200),
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "BusinessTaxSettings", @"
+                    CREATE TABLE [BusinessTaxSettings] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL UNIQUE REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [IsGstRegistered] BIT DEFAULT 0 NOT NULL,
+                        [GstIn] NVARCHAR(15),
+                        [GstScheme] NVARCHAR(50) DEFAULT 'None' NOT NULL,
+                        [PanNumber] NVARCHAR(20),
+                        [RegisteredState] NVARCHAR(100),
+                        [RegisteredStateCode] NVARCHAR(10),
+                        [DefaultTaxRate] DECIMAL(5,2) DEFAULT 0.00 NOT NULL,
+                        [PricesIncludeTax] BIT DEFAULT 1 NOT NULL,
+                        [TaxFilingFrequency] NVARCHAR(50) DEFAULT 'Monthly' NOT NULL,
+                        [EnableReverseCharge] BIT DEFAULT 0 NOT NULL,
+                        [EnableEInvoicing] BIT DEFAULT 0 NOT NULL,
+                        [EWayBillThreshold] DECIMAL(18,2) DEFAULT 50000.00 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "BusinessInvoiceSettings", @"
+                    CREATE TABLE [BusinessInvoiceSettings] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL UNIQUE REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [InvoicePrefix] NVARCHAR(20) DEFAULT 'INV-' NOT NULL,
+                        [StartingInvoiceNumber] INT DEFAULT 1001 NOT NULL,
+                        [CurrentSequenceNumber] INT DEFAULT 1000 NOT NULL,
+                        [InvoiceNumberFormat] NVARCHAR(50) DEFAULT 'INV-XXXX' NOT NULL,
+                        [DefaultCurrency] NVARCHAR(20) DEFAULT 'INR (₹)' NOT NULL,
+                        [DefaultPaymentTerms] NVARCHAR(50) DEFAULT 'Due on Receipt' NOT NULL,
+                        [InvoiceDueDays] INT DEFAULT 0 NOT NULL,
+                        [DefaultNotes] NVARCHAR(500),
+                        [TermsAndConditions] NVARCHAR(MAX),
+                        [AutoRoundOff] BIT DEFAULT 1 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "BusinessInvoiceDesigns", @"
+                    CREATE TABLE [BusinessInvoiceDesigns] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL UNIQUE REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [ThemeId] NVARCHAR(50) DEFAULT 'modern' NOT NULL,
+                        [PaperSize] NVARCHAR(50) DEFAULT 'Thermal80mm' NOT NULL,
+                        [BrandColorHex] NVARCHAR(20) DEFAULT '#006A61' NOT NULL,
+                        [StoreDisplayName] NVARCHAR(200),
+                        [Tagline] NVARCHAR(200),
+                        [ShowLogo] BIT DEFAULT 1 NOT NULL,
+                        [LogoPosition] NVARCHAR(20) DEFAULT 'left' NOT NULL,
+                        [ShowGstin] BIT DEFAULT 1 NOT NULL,
+                        [ShowContact] BIT DEFAULT 1 NOT NULL,
+                        [ShowSerialNo] BIT DEFAULT 1 NOT NULL,
+                        [ShowItemName] BIT DEFAULT 1 NOT NULL,
+                        [ShowHsnSac] BIT DEFAULT 1 NOT NULL,
+                        [ShowMrp] BIT DEFAULT 1 NOT NULL,
+                        [ShowDiscount] BIT DEFAULT 1 NOT NULL,
+                        [ShowTaxRate] BIT DEFAULT 1 NOT NULL,
+                        [ShowBatchExpiry] BIT DEFAULT 0 NOT NULL,
+                        [ShowAmountInWords] BIT DEFAULT 1 NOT NULL,
+                        [ShowPreviousBalance] BIT DEFAULT 1 NOT NULL,
+                        [ShowTaxBreakdown] BIT DEFAULT 1 NOT NULL,
+                        [ShowSignature] BIT DEFAULT 1 NOT NULL,
+                        [SignatoryTitle] NVARCHAR(100) DEFAULT 'Authorized Signatory' NOT NULL,
+                        [FooterMessage] NVARCHAR(500),
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "BusinessPrinterSettings", @"
+                    CREATE TABLE [BusinessPrinterSettings] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [BranchId] INT REFERENCES [Branches]([Id]) ON DELETE SET NULL,
+                        [PrinterName] NVARCHAR(100) NOT NULL,
+                        [PrinterType] NVARCHAR(50) DEFAULT 'BluetoothThermal' NOT NULL,
+                        [MacAddressOrIp] NVARCHAR(100),
+                        [PaperWidthMm] INT DEFAULT 80 NOT NULL,
+                        [AutoPrintOnBillComplete] BIT DEFAULT 1 NOT NULL,
+                        [NumberOfCopies] INT DEFAULT 1 NOT NULL,
+                        [FeedLinesAfterPrint] INT DEFAULT 2 NOT NULL,
+                        [CutPaperEnabled] BIT DEFAULT 1 NOT NULL,
+                        [OpenCashDrawerEnabled] BIT DEFAULT 0 NOT NULL,
+                        [IsActive] BIT DEFAULT 1 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "CustomerLedgers", @"
+                    CREATE TABLE [CustomerLedgers] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]),
+                        [CustomerId] INT NOT NULL REFERENCES [Customers]([Id]) ON DELETE CASCADE,
+                        [BillId] INT REFERENCES [Bills]([Id]) ON DELETE SET NULL,
+                        [TransactionType] NVARCHAR(50) NOT NULL,
+                        [Amount] DECIMAL(18,2) NOT NULL,
+                        [RunningBalance] DECIMAL(18,2) NOT NULL,
+                        [PaymentMode] NVARCHAR(50) DEFAULT 'Cash' NOT NULL,
+                        [ReferenceNumber] NVARCHAR(100),
+                        [Notes] NVARCHAR(500),
+                        [RecordedByStaffId] INT REFERENCES [StaffMembers]([Id]),
+                        [TransactionDate] DATETIME2 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL
+                    )");
+
+                CreateTableIfNotExists(context, "DiscountCoupons", @"
+                    CREATE TABLE [DiscountCoupons] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [CouponCode] NVARCHAR(50) NOT NULL,
+                        [DiscountType] NVARCHAR(20) DEFAULT 'Percentage' NOT NULL,
+                        [DiscountValue] DECIMAL(18,2) NOT NULL,
+                        [MinimumOrderAmount] DECIMAL(18,2) DEFAULT 0.00 NOT NULL,
+                        [MaximumDiscountAmount] DECIMAL(18,2),
+                        [ValidFrom] DATETIME2 NOT NULL,
+                        [ValidUntil] DATETIME2 NOT NULL,
+                        [UsageLimit] INT,
+                        [UsedCount] INT DEFAULT 0 NOT NULL,
+                        [IsActive] BIT DEFAULT 1 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL
+                    )");
+
+                CreateTableIfNotExists(context, "Warehouses", @"
+                    CREATE TABLE [Warehouses] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [BranchId] INT REFERENCES [Branches]([Id]) ON DELETE SET NULL,
+                        [Name] NVARCHAR(150) NOT NULL,
+                        [Code] NVARCHAR(50) NOT NULL,
+                        [Address] NVARCHAR(300),
+                        [ContactPerson] NVARCHAR(100),
+                        [Phone] NVARCHAR(20),
+                        [IsPrimary] BIT DEFAULT 0 NOT NULL,
+                        [IsActive] BIT DEFAULT 1 NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "StockTransfers", @"
+                    CREATE TABLE [StockTransfers] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]),
+                        [TransferNumber] NVARCHAR(50) NOT NULL,
+                        [SourceWarehouseId] INT NOT NULL REFERENCES [Warehouses]([Id]),
+                        [DestinationWarehouseId] INT NOT NULL REFERENCES [Warehouses]([Id]),
+                        [Status] NVARCHAR(50) DEFAULT 'Completed' NOT NULL,
+                        [TransferDate] DATETIME2 NOT NULL,
+                        [DispatchedByStaffId] INT REFERENCES [StaffMembers]([Id]),
+                        [ReceivedByStaffId] INT REFERENCES [StaffMembers]([Id]),
+                        [Notes] NVARCHAR(500),
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "StockTransferItems", @"
+                    CREATE TABLE [StockTransferItems] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [StockTransferId] INT NOT NULL REFERENCES [StockTransfers]([Id]) ON DELETE CASCADE,
+                        [InventoryItemId] INT NOT NULL REFERENCES [InventoryItems]([Id]),
+                        [Quantity] DECIMAL(18,2) NOT NULL,
+                        [Unit] NVARCHAR(20) DEFAULT 'PCS' NOT NULL,
+                        [BatchNumber] NVARCHAR(50)
+                    )");
+
+                CreateTableIfNotExists(context, "BusinessAppPreferences", @"
+                    CREATE TABLE [BusinessAppPreferences] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL UNIQUE REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [DefaultLanguage] NVARCHAR(10) DEFAULT 'en' NOT NULL,
+                        [DateFormat] NVARCHAR(50) DEFAULT 'dd/MM/yyyy' NOT NULL,
+                        [TimeFormat] NVARCHAR(20) DEFAULT '12h' NOT NULL,
+                        [CurrencySymbol] NVARCHAR(10) DEFAULT N'₹' NOT NULL,
+                        [CurrencyPlacement] NVARCHAR(20) DEFAULT 'BeforeAmount' NOT NULL,
+                        [EnableSoundEffects] BIT DEFAULT 1 NOT NULL,
+                        [EnableHapticFeedback] BIT DEFAULT 1 NOT NULL,
+                        [BarcodeScannerMode] NVARCHAR(50) DEFAULT 'AutoDetect' NOT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL,
+                        [UpdatedAt] DATETIME2
+                    )");
+
+                CreateTableIfNotExists(context, "SmsLogs", @"
+                    CREATE TABLE [SmsLogs] (
+                        [Id] INT IDENTITY(1,1) PRIMARY KEY,
+                        [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
+                        [BillId] INT REFERENCES [Bills]([Id]) ON DELETE SET NULL,
+                        [RecipientPhone] NVARCHAR(20) NOT NULL,
+                        [SenderId] NVARCHAR(10) NOT NULL,
+                        [MessageBody] NVARCHAR(1000) NOT NULL,
+                        [DltEntityId] NVARCHAR(50),
+                        [DltTemplateId] NVARCHAR(50),
+                        [ExotelSid] NVARCHAR(100),
+                        [Status] NVARCHAR(30) DEFAULT 'Sent' NOT NULL,
+                        [ErrorMessage] NVARCHAR(500),
+                        [SentAt] DATETIME2 NOT NULL
+                    )");
+
                 CreateTableIfNotExists(context, "WhatsAppAccounts", @"
                     CREATE TABLE [WhatsAppAccounts] (
                         [Id] INT IDENTITY(1,1) PRIMARY KEY,
@@ -235,6 +462,45 @@ namespace BillingBackend.Extensions
                 AddColumnIfNotExists(context, "PurchaseItems", "UnitPrice", "DECIMAL(18,2) DEFAULT 0 NOT NULL");
                 AddColumnIfNotExists(context, "PurchaseItems", "LineTotal", "DECIMAL(18,2) DEFAULT 0 NOT NULL");
 
+                // 14. Ensure Columns on WhatsAppAccounts table
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "Provider", "NVARCHAR(50) DEFAULT 'Twilio' NOT NULL");
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "TwilioSubaccountSid", "NVARCHAR(100) NULL");
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "TwilioSubaccountAuthToken", "NVARCHAR(1000) NULL");
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "SenderId", "NVARCHAR(100) NULL");
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "DisplayName", "NVARCHAR(100) NULL");
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "CreatedAt", "DATETIME2 DEFAULT GETUTCDATE() NOT NULL");
+                AddColumnIfNotExists(context, "WhatsAppAccounts", "UpdatedAt", "DATETIME2 NULL");
+
+                // 15. Ensure Columns on MessageLogs table
+                AddColumnIfNotExists(context, "MessageLogs", "TwilioMessageSid", "NVARCHAR(200) NULL");
+                AddColumnIfNotExists(context, "MessageLogs", "Provider", "NVARCHAR(50) DEFAULT 'Twilio' NOT NULL");
+                AddColumnIfNotExists(context, "MessageLogs", "TemplateName", "NVARCHAR(100) NULL");
+                AddColumnIfNotExists(context, "MessageLogs", "MediaUrl", "NVARCHAR(1000) NULL");
+                AddColumnIfNotExists(context, "MessageLogs", "ErrorCode", "NVARCHAR(50) NULL");
+                AddColumnIfNotExists(context, "MessageLogs", "ErrorMessage", "NVARCHAR(500) NULL");
+                AddColumnIfNotExists(context, "MessageLogs", "CreatedAt", "DATETIME2 DEFAULT GETUTCDATE() NOT NULL");
+
+                // Ensure Trial Tracking Columns on Businesses table
+                AddColumnIfNotExists(context, "Businesses", "IsTrial", "BIT DEFAULT 1 NOT NULL");
+                AddColumnIfNotExists(context, "Businesses", "TrialStartsAt", "DATETIME2 NULL");
+                AddColumnIfNotExists(context, "Businesses", "TrialEndsAt", "DATETIME2 NULL");
+
+                // Initialize trial tracking for existing Businesses if not set
+                ExecuteRawSqlDirect(context, """
+                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Businesses' AND COLUMN_NAME = 'TrialStartsAt')
+                    BEGIN
+                        UPDATE [Businesses]
+                        SET [TrialStartsAt] = ISNULL([TrialStartsAt], [CreatedAt]),
+                            [TrialEndsAt] = ISNULL([TrialEndsAt], DATEADD(day, 7, [CreatedAt])),
+                            [IsTrial] = CASE 
+                                WHEN [SubscriptionStatus] = 'Active' AND [RazorpaySubscriptionId] IS NOT NULL AND [RazorpaySubscriptionId] <> '' THEN 0
+                                WHEN DATEADD(day, 7, [CreatedAt]) > GETUTCDATE() THEN 1 
+                                ELSE 0 
+                            END
+                        WHERE [TrialStartsAt] IS NULL;
+                    END
+                """);
+
                 // Ensure Columns on SubscriptionPlans table
                 AddColumnIfNotExists(context, "SubscriptionPlans", "Subtitle", "NVARCHAR(200) NULL");
                 AddColumnIfNotExists(context, "SubscriptionPlans", "IsPopular", "BIT DEFAULT 0 NOT NULL");
@@ -246,24 +512,39 @@ namespace BillingBackend.Extensions
                     IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'SubscriptionPlans')
                     BEGIN
                         UPDATE [SubscriptionPlans]
-                        SET [Subtitle] = 'For single cash register outlets',
+                        SET [Name] = 'Starter Shop',
+                            [Subtitle] = 'Ideal for Single Kirana, Small Cafes & Standalone Stores',
+                            [MonthlyPrice] = 499.00,
+                            [YearlyPrice] = 4999.00,
+                            [MaxBranches] = 1,
+                            [MaxStaff] = 2,
                             [IsPopular] = 0,
                             [DisplayOrder] = 1,
-                            [FeaturesJson] = '[{"text":"1 Branch & 2 Cashier Profiles","included":true},{"text":"GST & Non-GST Invoicing","included":true},{"text":"CRM Customer Directory","included":true},{"text":"SMS Invoice Dispatches","included":true},{"text":"Auto WhatsApp Webhooks","included":false},{"text":"Multi-Branch Syncing","included":false}]'
+                            [FeaturesJson] = '[{"text":"Single Store & Counter POS","included":true},{"text":"2 Cashier Staff Accounts","included":true},{"text":"Thermal & A4 Tax Invoice Printing","included":true},{"text":"Customer Udhar Khata Ledger","included":true},{"text":"Stock Warning Alerts","included":true},{"text":"Multi-Branch Franchise Sync","included":false},{"text":"Stylist Commission Calculator","included":false}]'
                         WHERE [Id] = 1 OR [Name] LIKE '%Starter%';
 
                         UPDATE [SubscriptionPlans]
-                        SET [Subtitle] = 'Best for expanding retail franchises',
+                        SET [Name] = 'Growth Business',
+                            [Subtitle] = 'Perfect for High-Volume Retailers, Salons & Restaurants',
+                            [MonthlyPrice] = 999.00,
+                            [YearlyPrice] = 9999.00,
+                            [MaxBranches] = 3,
+                            [MaxStaff] = 10,
                             [IsPopular] = 1,
                             [DisplayOrder] = 2,
-                            [FeaturesJson] = '[{"text":"Up to 5 Branches Syncing","included":true},{"text":"Up to 10 Cashier Profiles","included":true},{"text":"Unlimited GST Invoices","included":true},{"text":"Auto WhatsApp Webhooks","included":true},{"text":"Stock Warning Alerts","included":true},{"text":"Dedicated Database Node","included":false}]'
-                        WHERE [Id] = 2 OR [Name] LIKE '%Growth%';
+                            [FeaturesJson] = '[{"text":"Up to 3 Store Outlets","included":true},{"text":"10 Staff Accounts & Role Controls","included":true},{"text":"Automated DLT SMS Receipts","included":true},{"text":"Barcode & Electronic Scale Integration","included":true},{"text":"Kitchen KOT & Table Layouts","included":true},{"text":"GST E-Invoicing & Tally Prime Sync","included":true},{"text":"Operating Expense & Profit Tracker","included":true}]'
+                        WHERE [Id] = 2 OR [Name] LIKE '%Growth%' OR [Name] LIKE '%Professional%';
 
                         UPDATE [SubscriptionPlans]
-                        SET [Subtitle] = 'For large chains with dedicated needs',
+                        SET [Name] = 'Enterprise Chain',
+                            [Subtitle] = 'Custom Architecture for Large Multi-City Franchises',
+                            [MonthlyPrice] = 2499.00,
+                            [YearlyPrice] = 24999.00,
+                            [MaxBranches] = 25,
+                            [MaxStaff] = 50,
                             [IsPopular] = 0,
                             [DisplayOrder] = 3,
-                            [FeaturesJson] = '[{"text":"Unlimited Branches & Cashiers","included":true},{"text":"Dedicated Database Cluster","included":true},{"text":"Custom PDF Invoice Templates","included":true},{"text":"SMS + WhatsApp Gateway Sync","included":true},{"text":"24/7 Priority Dedicated Manager","included":true},{"text":"API Integrations & Webhooks","included":true}]'
+                            [FeaturesJson] = '[{"text":"Unlimited Outlets & Central Warehouse","included":true},{"text":"50 Staff Accounts with Role Controls","included":true},{"text":"Dedicated Account Manager & 24/7 SLA","included":true},{"text":"Custom ERP & Tally 2-Way Sync","included":true},{"text":"Multi-Branch Royalty & P&L Analytics","included":true},{"text":"High-Throughput Exotel DLT SMS","included":true}]'
                         WHERE [Id] = 3 OR [Name] LIKE '%Enterprise%';
                     END
                 """);

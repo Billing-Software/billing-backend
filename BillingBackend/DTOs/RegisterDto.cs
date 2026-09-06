@@ -69,5 +69,7 @@ namespace BillingBackend.DTOs
 
         [StringLength(100)]
         public string? RegisteredState { get; set; }
+
+        public int? PlanId { get; set; }
     }
 }

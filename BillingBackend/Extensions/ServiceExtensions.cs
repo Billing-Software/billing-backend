@@ -1,6 +1,7 @@
 using BillingBackend.Data;
 using BillingBackend.Repositories;
 using BillingBackend.Services;
+using BillingBackend.Services.Sms;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -89,13 +90,9 @@ namespace BillingBackend.Extensions
             services.AddScoped<IReportService, ReportService>();
             services.AddScoped<IFeatureService, FeatureService>();
 
-            // WhatsApp Integration Module
-            services.AddScoped<IWhatsAppRepository, WhatsAppRepository>();
-            services.AddScoped<IWhatsAppService, WhatsAppService>();
-            services.AddScoped<IWebhookService, WebhookService>();
-            services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
-            services.AddHttpClient<IMetaApiClient, MetaApiClient>();
+
             services.AddHttpClient<IRazorpayService, RazorpayService>();
+            services.AddHttpClient<ISmsService, ExotelSmsService>();
 
             // Storage Service configuration
             services.AddHttpContextAccessor();

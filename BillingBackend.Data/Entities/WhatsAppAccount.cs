@@ -55,9 +55,43 @@ namespace BillingBackend.Data.Entities
         [MaxLength(20)]
         public string Status { get; set; } = "Pending";
 
+        /// <summary>
+        /// Provider type: Twilio (or Meta)
+        /// </summary>
+        [MaxLength(50)]
+        public string Provider { get; set; } = "Twilio";
+
+        /// <summary>
+        /// Dedicated Twilio Customer Subaccount SID provisioned under BillCom parent account.
+        /// </summary>
+        [MaxLength(100)]
+        public string? TwilioSubaccountSid { get; set; }
+
+        /// <summary>
+        /// Subaccount Auth Token — stored AES-256 encrypted.
+        /// </summary>
+        [MaxLength(1000)]
+        public string? TwilioSubaccountAuthToken { get; set; }
+
+        /// <summary>
+        /// Twilio WhatsApp Sender ID / SID registered under customer subaccount.
+        /// </summary>
+        [MaxLength(100)]
+        public string? SenderId { get; set; }
+
+        /// <summary>
+        /// Business Display Name shown on WhatsApp profile.
+        /// </summary>
+        [MaxLength(100)]
+        public string? DisplayName { get; set; }
+
         public DateTime ConnectedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? DisconnectedAt { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime? UpdatedAt { get; set; }
 
         // Navigation
         [ForeignKey(nameof(BusinessId))]

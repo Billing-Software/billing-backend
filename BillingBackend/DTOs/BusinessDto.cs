@@ -60,5 +60,14 @@ namespace BillingBackend.DTOs
 
         [StringLength(50)]
         public string ReceiptTemplateType { get; set; } = "Thermal80mm";
+
+        public int ActivePlanId { get; set; } = 1;
+        public int AllowedBranches { get; set; } = 1;
+        public int AllowedStaff { get; set; } = 2;
+        public string SubscriptionStatus { get; set; } = "Inactive";
+        public System.DateTime? SubscriptionExpiresAt { get; set; }
+        public bool IsTrial { get; set; } = true;
+        public System.DateTime? TrialStartsAt { get; set; }
+        public System.DateTime? TrialEndsAt { get; set; }
     }
 }

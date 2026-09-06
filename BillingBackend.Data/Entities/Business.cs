@@ -91,7 +91,11 @@ namespace BillingBackend.Data.Entities
         public string? RazorpaySubscriptionId { get; set; }
 
         [MaxLength(50)]
-        public string SubscriptionStatus { get; set; } = "Inactive"; // Inactive, Active, PastDue, Cancelled
+        public string SubscriptionStatus { get; set; } = "Trial"; // Trial, Active, PastDue, Cancelled, TrialExpired
+
+        public bool IsTrial { get; set; } = true;
+        public DateTime? TrialStartsAt { get; set; }
+        public DateTime? TrialEndsAt { get; set; }
 
         public DateTime? SubscriptionExpiresAt { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -108,5 +112,14 @@ namespace BillingBackend.Data.Entities
         public ICollection<StaffMember> StaffMembers { get; set; } = new List<StaffMember>();
         public ICollection<Bill> Bills { get; set; } = new List<Bill>();
         public WhatsAppAccount? WhatsAppAccount { get; set; }
+        public BusinessPaymentSettings? PaymentSettings { get; set; }
+        public BusinessTaxSettings? TaxSettings { get; set; }
+        public BusinessInvoiceSettings? InvoiceSettings { get; set; }
+        public BusinessInvoiceDesign? InvoiceDesign { get; set; }
+        public BusinessAppPreferences? AppPreferences { get; set; }
+        public ICollection<BusinessPrinterSettings> PrinterSettings { get; set; } = new List<BusinessPrinterSettings>();
+        public ICollection<Warehouse> Warehouses { get; set; } = new List<Warehouse>();
+        public ICollection<DiscountCoupon> DiscountCoupons { get; set; } = new List<DiscountCoupon>();
+        public ICollection<CustomerLedger> CustomerLedgers { get; set; } = new List<CustomerLedger>();
     }
 }

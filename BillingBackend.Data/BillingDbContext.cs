@@ -19,6 +19,9 @@ namespace BillingBackend.Data
         public DbSet<StaffMember> StaffMembers { get; set; }
         public DbSet<Bill> Bills { get; set; }
         public DbSet<BillItem> BillItems { get; set; }
+        public DbSet<BusinessSmsSettings> BusinessSmsSettings { get; set; }
+        public DbSet<BusinessPaymentSettings> BusinessPaymentSettings { get; set; }
+        public DbSet<SmsLog> SmsLogs { get; set; }
         public DbSet<WhatsAppAccount> WhatsAppAccounts { get; set; }
         public DbSet<WhatsAppTemplate> WhatsAppTemplates { get; set; }
         public DbSet<MessageLog> MessageLogs { get; set; }
@@ -39,6 +42,16 @@ namespace BillingBackend.Data
         public DbSet<AppFeature> AppFeatures { get; set; }
         public DbSet<PlanFeature> PlanFeatures { get; set; }
         public DbSet<RoleFeature> RoleFeatures { get; set; }
+        public DbSet<BusinessTaxSettings> BusinessTaxSettings { get; set; }
+        public DbSet<BusinessInvoiceSettings> BusinessInvoiceSettings { get; set; }
+        public DbSet<BusinessInvoiceDesign> BusinessInvoiceDesigns { get; set; }
+        public DbSet<BusinessPrinterSettings> BusinessPrinterSettings { get; set; }
+        public DbSet<CustomerLedger> CustomerLedgers { get; set; }
+        public DbSet<DiscountCoupon> DiscountCoupons { get; set; }
+        public DbSet<Warehouse> Warehouses { get; set; }
+        public DbSet<StockTransfer> StockTransfers { get; set; }
+        public DbSet<StockTransferItem> StockTransferItems { get; set; }
+        public DbSet<BusinessAppPreferences> BusinessAppPreferences { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -173,6 +186,178 @@ namespace BillingBackend.Data
                     .OnDelete(DeleteBehavior.NoAction);
             });
 
+            // ===== BusinessPaymentSettings =====
+            modelBuilder.Entity<BusinessPaymentSettings>(entity =>
+            {
+                entity.HasOne(bps => bps.Business)
+                    .WithOne(b => b.PaymentSettings)
+                    .HasForeignKey<BusinessPaymentSettings>(bps => bps.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(bps => bps.BusinessId).IsUnique();
+            });
+
+            // ===== BusinessTaxSettings =====
+            modelBuilder.Entity<BusinessTaxSettings>(entity =>
+            {
+                entity.HasOne(bts => bts.Business)
+                    .WithOne(b => b.TaxSettings)
+                    .HasForeignKey<BusinessTaxSettings>(bts => bts.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(bts => bts.BusinessId).IsUnique();
+                entity.Property(bts => bts.DefaultTaxRate).HasPrecision(5, 2);
+                entity.Property(bts => bts.EWayBillThreshold).HasPrecision(18, 2);
+            });
+
+            // ===== BusinessInvoiceSettings =====
+            modelBuilder.Entity<BusinessInvoiceSettings>(entity =>
+            {
+                entity.HasOne(bis => bis.Business)
+                    .WithOne(b => b.InvoiceSettings)
+                    .HasForeignKey<BusinessInvoiceSettings>(bis => bis.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(bis => bis.BusinessId).IsUnique();
+            });
+
+            // ===== BusinessInvoiceDesigns =====
+            modelBuilder.Entity<BusinessInvoiceDesign>(entity =>
+            {
+                entity.HasOne(bid => bid.Business)
+                    .WithOne(b => b.InvoiceDesign)
+                    .HasForeignKey<BusinessInvoiceDesign>(bid => bid.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(bid => bid.BusinessId).IsUnique();
+            });
+
+            // ===== BusinessPrinterSettings =====
+            modelBuilder.Entity<BusinessPrinterSettings>(entity =>
+            {
+                entity.HasOne(bps => bps.Business)
+                    .WithMany(b => b.PrinterSettings)
+                    .HasForeignKey(bps => bps.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(bps => bps.Branch)
+                    .WithMany()
+                    .HasForeignKey(bps => bps.BranchId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(bps => bps.BusinessId);
+            });
+
+            // ===== CustomerLedgers =====
+            modelBuilder.Entity<CustomerLedger>(entity =>
+            {
+                entity.HasOne(cl => cl.Business)
+                    .WithMany(b => b.CustomerLedgers)
+                    .HasForeignKey(cl => cl.BusinessId)
+                    .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasOne(cl => cl.Customer)
+                    .WithMany()
+                    .HasForeignKey(cl => cl.CustomerId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(cl => cl.Bill)
+                    .WithMany()
+                    .HasForeignKey(cl => cl.BillId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(cl => cl.RecordedByStaff)
+                    .WithMany()
+                    .HasForeignKey(cl => cl.RecordedByStaffId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.Property(cl => cl.Amount).HasPrecision(18, 2);
+                entity.Property(cl => cl.RunningBalance).HasPrecision(18, 2);
+
+                entity.HasIndex(cl => cl.BusinessId);
+                entity.HasIndex(cl => cl.CustomerId);
+                entity.HasIndex(cl => cl.TransactionDate);
+            });
+
+            // ===== DiscountCoupons =====
+            modelBuilder.Entity<DiscountCoupon>(entity =>
+            {
+                entity.HasOne(dc => dc.Business)
+                    .WithMany(b => b.DiscountCoupons)
+                    .HasForeignKey(dc => dc.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(dc => dc.DiscountValue).HasPrecision(18, 2);
+                entity.Property(dc => dc.MinimumOrderAmount).HasPrecision(18, 2);
+                entity.Property(dc => dc.MaximumDiscountAmount).HasPrecision(18, 2);
+
+                entity.HasIndex(dc => new { dc.BusinessId, dc.CouponCode }).IsUnique();
+            });
+
+            // ===== Warehouses =====
+            modelBuilder.Entity<Warehouse>(entity =>
+            {
+                entity.HasOne(w => w.Business)
+                    .WithMany(b => b.Warehouses)
+                    .HasForeignKey(w => w.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(w => w.Branch)
+                    .WithMany()
+                    .HasForeignKey(w => w.BranchId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(w => new { w.BusinessId, w.Code }).IsUnique();
+            });
+
+            // ===== StockTransfers =====
+            modelBuilder.Entity<StockTransfer>(entity =>
+            {
+                entity.HasOne(st => st.Business)
+                    .WithMany()
+                    .HasForeignKey(st => st.BusinessId)
+                    .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasOne(st => st.SourceWarehouse)
+                    .WithMany()
+                    .HasForeignKey(st => st.SourceWarehouseId)
+                    .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasOne(st => st.DestinationWarehouse)
+                    .WithMany()
+                    .HasForeignKey(st => st.DestinationWarehouseId)
+                    .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(st => new { st.BusinessId, st.TransferNumber }).IsUnique();
+            });
+
+            // ===== StockTransferItems =====
+            modelBuilder.Entity<StockTransferItem>(entity =>
+            {
+                entity.HasOne(sti => sti.StockTransfer)
+                    .WithMany(st => st.Items)
+                    .HasForeignKey(sti => sti.StockTransferId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(sti => sti.InventoryItem)
+                    .WithMany()
+                    .HasForeignKey(sti => sti.InventoryItemId)
+                    .OnDelete(DeleteBehavior.NoAction);
+
+                entity.Property(sti => sti.Quantity).HasPrecision(18, 2);
+            });
+
+            // ===== BusinessAppPreferences =====
+            modelBuilder.Entity<BusinessAppPreferences>(entity =>
+            {
+                entity.HasOne(bap => bap.Business)
+                    .WithOne(b => b.AppPreferences)
+                    .HasForeignKey<BusinessAppPreferences>(bap => bap.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(bap => bap.BusinessId).IsUnique();
+            });
+
             // ===== WhatsAppAccounts =====
             modelBuilder.Entity<WhatsAppAccount>(entity =>
             {
@@ -208,8 +393,9 @@ namespace BillingBackend.Data
                     .HasForeignKey(m => m.BillId)
                     .OnDelete(DeleteBehavior.SetNull);
 
-                // Index for fast webhook lookups by Meta message ID
+                // Index for fast webhook lookups by message ID
                 entity.HasIndex(m => m.MetaMessageId);
+                entity.HasIndex(m => m.TwilioMessageSid);
             });
             // ===== Expenses =====
             modelBuilder.Entity<Expense>(entity =>
@@ -327,8 +513,8 @@ namespace BillingBackend.Data
                 new SubscriptionPlan
                 {
                     Id = 1,
-                    Name = "Starter Plan",
-                    Subtitle = "For single cash register outlets",
+                    Name = "Starter Shop",
+                    Subtitle = "Ideal for Single Kirana, Small Cafes & Standalone Stores",
                     RazorpayPlanIdMonthly = "plan_starter_monthly",
                     RazorpayPlanIdYearly = "plan_starter_yearly",
                     MonthlyPrice = 499.00m,
@@ -337,39 +523,39 @@ namespace BillingBackend.Data
                     MaxStaff = 2,
                     IsPopular = false,
                     DisplayOrder = 1,
-                    FeaturesJson = "[{\"text\":\"1 Branch & 2 Cashier Profiles\",\"included\":true},{\"text\":\"GST & Non-GST Invoicing\",\"included\":true},{\"text\":\"CRM Customer Directory\",\"included\":true},{\"text\":\"SMS Invoice Dispatches\",\"included\":true},{\"text\":\"Auto WhatsApp Webhooks\",\"included\":false},{\"text\":\"Multi-Branch Syncing\",\"included\":false}]",
+                    FeaturesJson = "[{\"text\":\"Single Store & Counter POS\",\"included\":true},{\"text\":\"2 Cashier Staff Accounts\",\"included\":true},{\"text\":\"Thermal & A4 Tax Invoice Printing\",\"included\":true},{\"text\":\"Customer Udhar Khata Ledger\",\"included\":true},{\"text\":\"Stock Warning Alerts\",\"included\":true},{\"text\":\"Multi-Branch Franchise Sync\",\"included\":false},{\"text\":\"Stylist Commission Calculator\",\"included\":false}]",
                     IsActive = true
                 },
                 new SubscriptionPlan
                 {
                     Id = 2,
-                    Name = "Growth Plan",
-                    Subtitle = "Best for expanding retail franchises",
+                    Name = "Growth Business",
+                    Subtitle = "Perfect for High-Volume Retailers, Salons & Restaurants",
                     RazorpayPlanIdMonthly = "plan_growth_monthly",
                     RazorpayPlanIdYearly = "plan_growth_yearly",
-                    MonthlyPrice = 1499.00m,
-                    YearlyPrice = 14990.00m,
-                    MaxBranches = 5,
+                    MonthlyPrice = 999.00m,
+                    YearlyPrice = 9999.00m,
+                    MaxBranches = 3,
                     MaxStaff = 10,
                     IsPopular = true,
                     DisplayOrder = 2,
-                    FeaturesJson = "[{\"text\":\"Up to 5 Branches Syncing\",\"included\":true},{\"text\":\"Up to 10 Cashier Profiles\",\"included\":true},{\"text\":\"Unlimited GST Invoices\",\"included\":true},{\"text\":\"Auto WhatsApp Webhooks\",\"included\":true},{\"text\":\"Stock Warning Alerts\",\"included\":true},{\"text\":\"Dedicated Database Node\",\"included\":false}]",
+                    FeaturesJson = "[{\"text\":\"Up to 3 Store Outlets\",\"included\":true},{\"text\":\"10 Staff Accounts & Role Controls\",\"included\":true},{\"text\":\"Automated DLT SMS Receipts\",\"included\":true},{\"text\":\"Barcode & Electronic Scale Integration\",\"included\":true},{\"text\":\"Kitchen KOT & Table Layouts\",\"included\":true},{\"text\":\"GST E-Invoicing & Tally Prime Sync\",\"included\":true},{\"text\":\"Operating Expense & Profit Tracker\",\"included\":true}]",
                     IsActive = true
                 },
                 new SubscriptionPlan
                 {
                     Id = 3,
-                    Name = "Enterprise Plan",
-                    Subtitle = "For large chains with dedicated needs",
+                    Name = "Enterprise Chain",
+                    Subtitle = "Custom Architecture for Large Multi-City Franchises",
                     RazorpayPlanIdMonthly = "plan_enterprise_monthly",
                     RazorpayPlanIdYearly = "plan_enterprise_yearly",
-                    MonthlyPrice = 4999.00m,
-                    YearlyPrice = 49990.00m,
-                    MaxBranches = -1,
-                    MaxStaff = 999,
+                    MonthlyPrice = 2499.00m,
+                    YearlyPrice = 24999.00m,
+                    MaxBranches = 25,
+                    MaxStaff = 50,
                     IsPopular = false,
                     DisplayOrder = 3,
-                    FeaturesJson = "[{\"text\":\"Unlimited Branches & Cashiers\",\"included\":true},{\"text\":\"Dedicated Database Cluster\",\"included\":true},{\"text\":\"Custom PDF Invoice Templates\",\"included\":true},{\"text\":\"SMS + WhatsApp Gateway Sync\",\"included\":true},{\"text\":\"24/7 Priority Dedicated Manager\",\"included\":true},{\"text\":\"API Integrations & Webhooks\",\"included\":true}]",
+                    FeaturesJson = "[{\"text\":\"Unlimited Outlets & Central Warehouse\",\"included\":true},{\"text\":\"50 Staff Accounts with Role Controls\",\"included\":true},{\"text\":\"Dedicated Account Manager & 24/7 SLA\",\"included\":true},{\"text\":\"Custom ERP & Tally 2-Way Sync\",\"included\":true},{\"text\":\"Multi-Branch Royalty & P&L Analytics\",\"included\":true},{\"text\":\"High-Throughput Exotel DLT SMS\",\"included\":true}]",
                     IsActive = true
                 }
             );

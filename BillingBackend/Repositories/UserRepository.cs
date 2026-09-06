@@ -57,11 +57,16 @@ namespace BillingBackend.Repositories
                     await _context.SaveChangesAsync();
 
                     // 2. Insert Business
+                    int targetPlanId = (registerDto.PlanId.HasValue && registerDto.PlanId.Value > 0) ? registerDto.PlanId.Value : 1;
+                    var selectedPlan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id == targetPlanId);
+                    int allowedBranches = selectedPlan?.MaxBranches ?? (targetPlanId == 2 ? 3 : (targetPlanId == 3 ? 25 : 1));
+                    int allowedStaff = selectedPlan?.MaxStaff ?? (targetPlanId == 2 ? 10 : (targetPlanId == 3 ? 50 : 2));
+
                     var business = new Business
                     {
                         OwnerId = user.Id,
                         LegalName = registerDto.LegalName,
-                        TradingName = registerDto.TradingName,
+                        TradingName = registerDto.TradingName ?? registerDto.LegalName,
                         LogoUrl = registerDto.LogoUrl,
                         Address = registerDto.BusinessAddress,
                         City = registerDto.BusinessCity,
@@ -76,7 +81,15 @@ namespace BillingBackend.Repositories
                         GstScheme = string.IsNullOrEmpty(registerDto.GstScheme) ? "Regular" : registerDto.GstScheme,
                         RegisteredState = registerDto.RegisteredState ?? registerDto.BusinessState,
                         DefaultTaxRate = registerDto.DefaultTaxRate,
-                        PricesIncludeTax = registerDto.PricesIncludeTax
+                        PricesIncludeTax = registerDto.PricesIncludeTax,
+                        ActivePlanId = targetPlanId,
+                        AllowedBranches = allowedBranches,
+                        AllowedStaff = allowedStaff,
+                        SubscriptionStatus = "Trial",
+                        IsTrial = true,
+                        TrialStartsAt = DateTime.UtcNow,
+                        TrialEndsAt = DateTime.UtcNow.AddDays(7),
+                        SubscriptionExpiresAt = DateTime.UtcNow.AddDays(7)
                     };
                     await _context.Businesses.AddAsync(business);
                     await _context.SaveChangesAsync();
@@ -193,6 +206,9 @@ namespace BillingBackend.Repositories
                         RazorpayCustomerId = razorpayCustomerId,
                         RazorpaySubscriptionId = razorpaySubscriptionId,
                         SubscriptionStatus = "Active",
+                        IsTrial = false,
+                        TrialStartsAt = DateTime.UtcNow,
+                        TrialEndsAt = DateTime.UtcNow.AddDays(7),
                         SubscriptionExpiresAt = expiresAt
                     };
                     await _context.Businesses.AddAsync(business);

@@ -7,8 +7,8 @@ using Microsoft.Extensions.Configuration;
 namespace BillingBackend.Services
 {
     /// <summary>
-    /// AES-256-CBC encryption for Meta access tokens.
-    /// Key is read from configuration: Meta:TokenEncryptionKey (base64-encoded 32-byte key).
+    /// AES-256-CBC encryption for sensitive credentials.
+    /// Key is read from configuration: Security:TokenEncryptionKey (base64-encoded 32-byte key).
     /// </summary>
     public class TokenEncryptionService : ITokenEncryptionService
     {
@@ -16,13 +16,13 @@ namespace BillingBackend.Services
 
         public TokenEncryptionService(IConfiguration configuration)
         {
-            var rawKey = configuration["Meta:TokenEncryptionKey"];
+            var rawKey = configuration["Security:TokenEncryptionKey"];
             if (string.IsNullOrEmpty(rawKey))
             {
-                // Generate a deterministic key from AppSecret if no dedicated key is set
-                var appSecret = configuration["Meta:AppSecret"] ?? "default-dev-secret-do-not-use";
+                // Generate a deterministic key from Twilio AuthToken or JWT Key if no dedicated key is set
+                var secret = configuration["Twilio:AuthToken"] ?? configuration["Jwt:Key"] ?? "default-encryption-secret-key-32";
                 using var sha256 = SHA256.Create();
-                _key = sha256.ComputeHash(Encoding.UTF8.GetBytes(appSecret));
+                _key = sha256.ComputeHash(Encoding.UTF8.GetBytes(secret));
             }
             else
             {

@@ -49,9 +49,13 @@ namespace BillingBackend.Services
                     Phone = dto.Phone,
                     Email = dto.Email,
                     Website = dto.Website,
-                    GstIn = dto.GstIn,
-                    GstScheme = string.IsNullOrEmpty(dto.GstScheme) ? "Regular" : dto.GstScheme,
-                    DefaultTaxRate = dto.DefaultTaxRate,
+                    GstIn = string.IsNullOrWhiteSpace(dto.GstIn) ? null : dto.GstIn.Trim(),
+                    GstScheme = string.IsNullOrEmpty(dto.GstScheme)
+                        ? (string.IsNullOrWhiteSpace(dto.GstIn) ? "None" : "Regular")
+                        : dto.GstScheme,
+                    DefaultTaxRate = (dto.GstScheme == "None" || dto.GstScheme == "Non-GST" || string.IsNullOrWhiteSpace(dto.GstIn))
+                        ? 0.0m
+                        : dto.DefaultTaxRate,
                     PricesIncludeTax = dto.PricesIncludeTax,
                     ReceiptHeader = dto.ReceiptHeader,
                     ReceiptFooter = dto.ReceiptFooter,
@@ -93,7 +97,17 @@ namespace BillingBackend.Services
                 ReceiptHeader = b.ReceiptHeader,
                 ReceiptFooter = b.ReceiptFooter,
                 ShowLogoOnReceipt = b.ShowLogoOnReceipt,
-                ReceiptTemplateType = b.ReceiptTemplateType
+                ReceiptTemplateType = b.ReceiptTemplateType,
+                ActivePlanId = b.ActivePlanId,
+                AllowedBranches = b.AllowedBranches,
+                AllowedStaff = b.AllowedStaff,
+                SubscriptionStatus = b.IsTrial
+                    ? ((b.TrialEndsAt.HasValue && b.TrialEndsAt.Value < System.DateTime.UtcNow) ? "TrialExpired" : "Trial")
+                    : b.SubscriptionStatus,
+                SubscriptionExpiresAt = b.SubscriptionExpiresAt,
+                IsTrial = b.IsTrial,
+                TrialStartsAt = b.TrialStartsAt,
+                TrialEndsAt = b.TrialEndsAt
             };
         }
     }

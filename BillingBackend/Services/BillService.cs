@@ -14,6 +14,7 @@ namespace BillingBackend.Services
     {
         private readonly IBillRepository _billRepository;
         private readonly IAuditService _auditService;
+        private readonly ISettingsService _settingsService;
         private readonly ILogger<BillService> _logger;
 
         // Valid state transitions for the payment state machine
@@ -30,10 +31,12 @@ namespace BillingBackend.Services
         public BillService(
             IBillRepository billRepository,
             IAuditService auditService,
+            ISettingsService settingsService,
             ILogger<BillService> logger)
         {
             _billRepository = billRepository;
             _auditService = auditService;
+            _settingsService = settingsService;
             _logger = logger;
         }
 
@@ -128,7 +131,13 @@ namespace BillingBackend.Services
             }
         }
 
-        public async Task<BillDto?> UpdateStatusAsync(int businessId, int billId, string newStatus, string? paymentReference = null, string? notes = null)
+        public async Task<BillDto?> UpdateStatusAsync(
+            int businessId, 
+            int billId, 
+            string newStatus, 
+            string? paymentMethod = null, 
+            string? paymentReference = null, 
+            string? notes = null)
         {
             try
             {
@@ -141,19 +150,23 @@ namespace BillingBackend.Services
 
                 var oldStatus = bill.Status;
 
-                // Validate state transition
-                if (!ValidTransitions.ContainsKey(oldStatus) || !ValidTransitions[oldStatus].Contains(newStatus))
+                // Validate state transition if status is actually changing
+                if (oldStatus != newStatus)
                 {
-                    _logger.LogWarning(
-                        "[BillService] Invalid state transition: {OldStatus} → {NewStatus} for bill {BillId}",
-                        oldStatus, newStatus, billId);
-                    throw new InvalidOperationException($"Invalid status transition: {oldStatus} → {newStatus}");
+                    if (!ValidTransitions.ContainsKey(oldStatus) || !ValidTransitions[oldStatus].Contains(newStatus))
+                    {
+                        _logger.LogWarning(
+                            "[BillService] Invalid state transition: {OldStatus} → {NewStatus} for bill {BillId}",
+                            oldStatus, newStatus, billId);
+                        throw new InvalidOperationException($"Invalid status transition: {oldStatus} → {newStatus}");
+                    }
                 }
 
                 bill.Status = newStatus;
                 bill.UpdatedAt = DateTime.UtcNow;
-                if (paymentReference != null) bill.PaymentReference = paymentReference;
-                if (notes != null) bill.Notes = notes;
+                if (!string.IsNullOrWhiteSpace(paymentMethod)) bill.PaymentMethod = paymentMethod.Trim();
+                if (paymentReference != null) bill.PaymentReference = paymentReference.Trim();
+                if (notes != null) bill.Notes = notes.Trim();
 
                 await _billRepository.UpdateAsync(bill);
 
@@ -161,7 +174,7 @@ namespace BillingBackend.Services
                 await _auditService.LogAsync(
                     businessId, "Bill", billId, "StatusChanged",
                     oldValues: new { Status = oldStatus },
-                    newValues: new { Status = newStatus, PaymentReference = paymentReference },
+                    newValues: new { Status = newStatus, PaymentMethod = bill.PaymentMethod, PaymentReference = bill.PaymentReference },
                     description: $"Bill {bill.BillNumber} status changed: {oldStatus} → {newStatus}");
 
                 _logger.LogInformation(
@@ -177,6 +190,122 @@ namespace BillingBackend.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[BillService] Failed to update status for bill {BillId}", billId);
+                throw;
+            }
+        }
+
+        public async Task<BillDto?> RecordPaymentAsync(int businessId, int billId, RecordBillPaymentDto dto)
+        {
+            try
+            {
+                var bill = await _billRepository.GetByIdAsync(businessId, billId);
+                if (bill == null)
+                {
+                    _logger.LogWarning("[BillService] Bill {BillId} not found for payment recording in business {BusinessId}", billId, businessId);
+                    return null;
+                }
+
+                var oldStatus = bill.Status;
+                var oldMethod = bill.PaymentMethod;
+                var newStatus = string.IsNullOrWhiteSpace(dto.Status) ? "Paid" : dto.Status.Trim();
+
+                // Validate state transition if status is actually changing
+                if (oldStatus != newStatus)
+                {
+                    if (!ValidTransitions.ContainsKey(oldStatus) || !ValidTransitions[oldStatus].Contains(newStatus))
+                    {
+                        _logger.LogWarning(
+                            "[BillService] Invalid state transition: {OldStatus} → {NewStatus} for bill {BillId}",
+                            oldStatus, newStatus, billId);
+                        throw new InvalidOperationException($"Invalid status transition: {oldStatus} → {newStatus}");
+                    }
+                }
+
+                bill.Status = newStatus;
+                bill.PaymentMethod = string.IsNullOrWhiteSpace(dto.PaymentMethod) ? "UPI" : dto.PaymentMethod.Trim();
+                if (!string.IsNullOrWhiteSpace(dto.PaymentReference))
+                {
+                    bill.PaymentReference = dto.PaymentReference.Trim();
+                }
+                if (!string.IsNullOrWhiteSpace(dto.Notes))
+                {
+                    bill.Notes = dto.Notes.Trim();
+                }
+                bill.UpdatedAt = DateTime.UtcNow;
+
+                await _billRepository.UpdateAsync(bill);
+
+                await _auditService.LogAsync(
+                    businessId, "Bill", billId, "PaymentRecorded",
+                    oldValues: new { Status = oldStatus, PaymentMethod = oldMethod },
+                    newValues: new { Status = newStatus, PaymentMethod = bill.PaymentMethod, PaymentReference = bill.PaymentReference },
+                    description: $"Bill {bill.BillNumber} payment recorded: ₹{bill.TotalAmount} via {bill.PaymentMethod}");
+
+                _logger.LogInformation(
+                    "[BillService] Bill {BillId} payment recorded: {Status} via {PaymentMethod} (Ref: {PaymentReference}) | Business: {BusinessId}",
+                    billId, bill.Status, bill.PaymentMethod, bill.PaymentReference, businessId);
+
+                return MapToDto(bill);
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[BillService] Failed to record payment for bill {BillId}", billId);
+                throw;
+            }
+        }
+
+        public async Task<BillUpiQrResponseDto?> GenerateUpiQrAsync(int businessId, int billId)
+        {
+            try
+            {
+                var bill = await _billRepository.GetByIdAsync(businessId, billId);
+                if (bill == null)
+                {
+                    _logger.LogWarning("[BillService] Bill {BillId} not found for UPI QR generation in business {BusinessId}", billId, businessId);
+                    return null;
+                }
+
+                var paymentSettings = await _settingsService.GetPaymentSettingsAsync(businessId);
+                var upiVpa = paymentSettings?.UpiVpa?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(upiVpa))
+                {
+                    upiVpa = "merchant@upi";
+                }
+
+                var payeeName = paymentSettings?.AccountHolderName?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(payeeName))
+                {
+                    payeeName = bill.Branch?.Name ?? "Merchant";
+                }
+
+                var formattedAmount = bill.TotalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+                var note = $"Bill {bill.BillNumber}";
+                var encodedPayee = Uri.EscapeDataString(payeeName);
+                var encodedNote = Uri.EscapeDataString(note);
+                var encodedRef = Uri.EscapeDataString(bill.BillNumber);
+
+                // NPCI Standard Deep Link
+                var upiUri = $"upi://pay?pa={upiVpa}&pn={encodedPayee}&am={formattedAmount}&cu=INR&tn={encodedNote}&tr={encodedRef}";
+
+                return new BillUpiQrResponseDto
+                {
+                    BillId = bill.Id,
+                    BillNumber = bill.BillNumber,
+                    Amount = bill.TotalAmount,
+                    UpiVpa = upiVpa,
+                    PayeeName = payeeName,
+                    TransactionNote = note,
+                    UpiUri = upiUri,
+                    Status = bill.Status
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[BillService] Failed to generate dynamic UPI QR for bill {BillId}", billId);
                 throw;
             }
         }
