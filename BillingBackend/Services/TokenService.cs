@@ -18,11 +18,16 @@ namespace BillingBackend.Services
 
         public TokenService(IConfiguration config)
         {
-            var jwtKey = config["Jwt:Key"] ?? throw new ArgumentNullException("Jwt:Key is missing from settings");
-            _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+            var jwtKey = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing. Set env var Jwt__Key (min 32 random bytes).");
+            var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+            if (keyBytes.Length < 32)
+                throw new InvalidOperationException("Jwt:Key must be at least 32 bytes (256 bits) for HS256. Generate a strong random key.");
+            _key = new SymmetricSecurityKey(keyBytes);
             _issuer = config["Jwt:Issuer"] ?? throw new ArgumentNullException("Jwt:Issuer is missing from settings");
             _audience = config["Jwt:Audience"] ?? throw new ArgumentNullException("Jwt:Audience is missing from settings");
             _durationInMinutes = config.GetValue<int>("Jwt:DurationInMinutes", 60);
+            if (_durationInMinutes <= 0 || _durationInMinutes > 120)
+                _durationInMinutes = 60;
         }
 
         public string CreateToken(User user, int businessId, int? staffId = null)

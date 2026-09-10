@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
@@ -10,8 +12,10 @@ using BillingBackend.Services;
 
 namespace BillingBackend.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
+    [RequestSizeLimit(10 * 1024 * 1024)] // 10 MB
     public class UploadController : ControllerBase
     {
         private readonly IStorageService _storageService;
@@ -23,60 +27,93 @@ namespace BillingBackend.Controllers
             _logger = logger;
         }
 
+        [EnableRateLimiting("api")]
         [HttpPost]
+        [RequestFormLimits(MultipartBodyLengthLimit = 10 * 1024 * 1024, ValueLengthLimit = 2 * 1024 * 1024)]
         public async Task<IActionResult> UploadImage(IFormFile file)
         {
-            _logger.LogInformation("UploadImage endpoint triggered.");
-
             if (file == null || file.Length == 0)
-            {
-                _logger.LogWarning("UploadImage failed: File is null or empty.");
-                return BadRequest("No file uploaded.");
-            }
+                return BadRequest(new { message = "No file uploaded." });
+            if (file.Length > 10 * 1024 * 1024)
+                return BadRequest(new { message = "File too large. Max 10 MB." });
 
-            _logger.LogInformation("Received file: Name={FileName}, Length={Length} bytes, ContentType={ContentType}", 
-                file.FileName, file.Length, file.ContentType);
-
-            // Validate image extension
+            // Validate image extension (first gate; content is re-validated via decode + magic bytes)
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-            if (!allowedExtensions.Contains(extension))
-            {
-                _logger.LogWarning("UploadImage failed: Invalid file extension '{Extension}'. Allowed extensions: {Allowed}", 
-                    extension, string.Join(", ", allowedExtensions));
-                return BadRequest("Invalid image format. Allowed: .jpg, .jpeg, .png, .gif, .webp");
-            }
+            if (string.IsNullOrEmpty(extension) || !allowedExtensions.Contains(extension))
+                return BadRequest(new { message = "Invalid image format. Allowed: .jpg, .jpeg, .png, .gif, .webp" });
+
+            // MIME allowlist (client-provided, so only a hint — real check is decode below)
+            var allowedMime = new[] { "image/jpeg", "image/png", "image/gif", "image/webp" };
+            if (!string.IsNullOrWhiteSpace(file.ContentType) &&
+                !allowedMime.Contains(file.ContentType.ToLowerInvariant()))
+                return BadRequest(new { message = "Invalid content type." });
 
             try
             {
-                // Generate unique filename
-                var uniqueFileName = $"{Guid.NewGuid()}.webp";
+                // Generate unique filename (never trust client filename — prevents traversal)
+                var uniqueFileName = $"{Guid.NewGuid():N}.webp";
                 string fileUrl;
 
-                _logger.LogInformation("Starting image transcoding to WebP format in memory...");
-                
                 using (var stream = file.OpenReadStream())
-                using (var image = await Image.LoadAsync(stream))
-                using (var memoryStream = new MemoryStream())
                 {
-                    await image.SaveAsWebpAsync(memoryStream);
-                    _logger.LogInformation("Transcoding completed. Original size: {OriginalSize} bytes -> WebP size: {WebpSize} bytes", 
-                        file.Length, memoryStream.Length);
+                    // Magic-byte pre-check before ImageSharp decode (cheap reject of non-images)
+                    if (!HasImageMagicBytes(stream))
+                        return BadRequest(new { message = "File is not a valid image." });
 
+                    using var image = await Image.LoadAsync(stream);
+                    // Reject decompression bombs: cap decoded pixels (e.g. 25 MP).
+                    if (image.Width <= 0 || image.Height <= 0 || (long)image.Width * image.Height > 25_000_000)
+                        return BadRequest(new { message = "Image dimensions are not allowed." });
+
+                    using var memoryStream = new MemoryStream();
+                    await image.SaveAsWebpAsync(memoryStream);
                     memoryStream.Position = 0; // Reset stream position for upload
-                    
-                    _logger.LogInformation("Calling StorageService to upload '{FileName}'...", uniqueFileName);
                     fileUrl = await _storageService.UploadFileAsync(memoryStream, uniqueFileName, "image/webp");
                 }
 
-                _logger.LogInformation("Upload successful. Image URL: {Url}", fileUrl);
                 return Ok(new { url = fileUrl });
+            }
+            catch (UnknownImageFormatException)
+            {
+                return BadRequest(new { message = "File is not a valid image." });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "UploadImage failed with exception. Message: {Message}", ex.Message);
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                _logger.LogError(ex, "UploadImage failed.");
+                return StatusCode(500, new { message = "Upload failed. Please try again." });
+            }
+        }
+
+        private static bool HasImageMagicBytes(Stream stream)
+        {
+            try
+            {
+                Span<byte> header = stackalloc byte[12];
+                stream.Position = 0;
+                int read = stream.Read(header);
+                stream.Position = 0;
+                if (read < 4)
+                    return false;
+                // JPEG FF D8 FF
+                if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+                    return true;
+                // PNG 89 50 4E 47
+                if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47)
+                    return true;
+                // GIF 47 49 46 38
+                if (header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38)
+                    return true;
+                // WEBP RIFF....WEBP
+                if (read >= 12 && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46 &&
+                    header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50)
+                    return true;
+                return false;
+            }
+            catch
+            {
+                return false;
             }
         }
     }

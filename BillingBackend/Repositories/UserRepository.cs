@@ -44,14 +44,14 @@ namespace BillingBackend.Repositories
             {
                 try
                 {
-                    // 1. Insert User
+                    // 1. Insert User (Role is always server-assigned: self-service = Owner. Never trust client Role.)
                     var user = new User
                     {
                         Username = registerDto.Username,
                         Email = registerDto.Email,
                         PasswordHash = passwordHash,
                         PasswordSalt = passwordSalt,
-                        Role = string.IsNullOrEmpty(registerDto.Role) ? "Owner" : registerDto.Role
+                        Role = "Owner"
                     };
                     await _context.Users.AddAsync(user);
                     await _context.SaveChangesAsync();
@@ -170,14 +170,14 @@ namespace BillingBackend.Repositories
             {
                 try
                 {
-                    // 1. Insert User
+                    // 1. Insert User (Role is always server-assigned for paid activation: Owner.)
                     var user = new User
                     {
                         Username = registerDto.Username,
                         Email = registerDto.Email,
                         PasswordHash = passwordHash,
                         PasswordSalt = passwordSalt,
-                        Role = string.IsNullOrEmpty(registerDto.Role) ? "Owner" : registerDto.Role
+                        Role = "Owner"
                     };
                     await _context.Users.AddAsync(user);
                     await _context.SaveChangesAsync();
@@ -286,6 +286,19 @@ namespace BillingBackend.Repositories
                 _context.UserRefreshTokens.RemoveRange(expired);
             }
 
+            // Cap active sessions: keep max 5 newest, revoke oldest (industrial session hygiene).
+            var active = await _context.UserRefreshTokens
+                .Where(rt => rt.UserId == token.UserId && !rt.IsRevoked && rt.ExpiryTime >= DateTime.UtcNow)
+                .OrderBy(rt => rt.CreatedAt)
+                .ToListAsync();
+            const int maxSessions = 5;
+            if (active.Count >= maxSessions)
+            {
+                var toRevoke = active.Take(active.Count - maxSessions + 1).ToList();
+                foreach (var t in toRevoke)
+                    t.IsRevoked = true;
+            }
+
             await _context.UserRefreshTokens.AddAsync(token);
         }
 
@@ -300,6 +313,16 @@ namespace BillingBackend.Repositories
         {
             _context.UserRefreshTokens.Remove(token);
             await Task.CompletedTask;
+        }
+
+        public async Task RevokeAllRefreshTokensAsync(int userId)
+        {
+            var tokens = await _context.UserRefreshTokens
+                .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+                .ToListAsync();
+            foreach (var t in tokens)
+                t.IsRevoked = true;
+            await _context.SaveChangesAsync();
         }
 
         public async Task<PendingRegistration?> GetPendingRegistrationByEmailAsync(string email)

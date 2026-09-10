@@ -17,12 +17,10 @@ namespace BillingBackend.Services
         public TokenEncryptionService(IConfiguration configuration)
         {
             var rawKey = configuration["Security:TokenEncryptionKey"];
-            if (string.IsNullOrEmpty(rawKey))
+            if (string.IsNullOrWhiteSpace(rawKey))
             {
-                // Generate a deterministic key from Twilio AuthToken or JWT Key if no dedicated key is set
-                var secret = configuration["Twilio:AuthToken"] ?? configuration["Jwt:Key"] ?? "default-encryption-secret-key-32";
-                using var sha256 = SHA256.Create();
-                _key = sha256.ComputeHash(Encoding.UTF8.GetBytes(secret));
+                throw new InvalidOperationException(
+                    "Security:TokenEncryptionKey is missing. Set env var Security__TokenEncryptionKey (32-byte base64). Refusing to start with a fallback key.");
             }
             else
             {

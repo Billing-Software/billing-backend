@@ -1,5 +1,6 @@
 using BillingBackend.DTOs;
 using BillingBackend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<StaffDto>>> GetAll()
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var staffList = await _staffService.GetByBusinessIdAsync(CurrentBusinessId);
@@ -25,13 +27,14 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching staff members list.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching staff members list.", correlationId = CorrelationId });
             }
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<StaffDto>> GetById(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var staff = await _staffService.GetByIdAsync(CurrentBusinessId, id);
@@ -40,13 +43,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching staff member details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching staff member details.", correlationId = CorrelationId });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost]
         public async Task<ActionResult<StaffDto>> Create(StaffDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 var created = await _staffService.AddAsync(CurrentBusinessId, dto);
@@ -58,13 +64,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating staff member.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating staff member.", correlationId = CorrelationId });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("{id}")]
         public async Task<ActionResult<StaffDto>> Update(int id, StaffDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 dto.Id = id;
@@ -73,13 +82,15 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating staff member.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating staff member.", correlationId = CorrelationId });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var deleted = await _staffService.DeleteAsync(CurrentBusinessId, id);
@@ -88,7 +99,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting staff member.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting staff member.", correlationId = CorrelationId });
             }
         }
     }

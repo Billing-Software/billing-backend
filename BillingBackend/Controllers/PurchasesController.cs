@@ -25,7 +25,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching purchase records.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching purchase records.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -40,7 +40,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching purchase record details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching purchase record details.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -54,7 +54,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating purchase record.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating purchase record.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -69,7 +69,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting purchase record.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting purchase record.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

@@ -1,6 +1,7 @@
 using BillingBackend.DTOs;
 using BillingBackend.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -9,10 +10,12 @@ namespace BillingBackend.Controllers
     public class BillsController : BaseApiController
     {
         private readonly IBillService _billService;
+        private readonly ILogger<BillsController> _logger;
 
-        public BillsController(IBillService billService)
+        public BillsController(IBillService billService, ILogger<BillsController> logger)
         {
             _billService = billService;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -26,6 +29,7 @@ namespace BillingBackend.Controllers
             [FromQuery] decimal? minAmount = null,
             [FromQuery] decimal? maxAmount = null)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var bills = await _billService.GetByBusinessIdAsync(
@@ -34,13 +38,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching bills.", error = ex.Message });
+                _logger.LogError(ex, "GetAll bills failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error fetching bills.", correlationId = CorrelationId });
             }
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<BillDto>> GetById(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (id <= 0) return BadRequest(new { message = "Invalid bill id." });
             try
             {
                 var bill = await _billService.GetByIdAsync(CurrentBusinessId, id);
@@ -49,13 +56,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching bill details.", error = ex.Message });
+                _logger.LogError(ex, "GetById bill failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error fetching bill details.", correlationId = CorrelationId });
             }
         }
 
         [HttpPost]
         public async Task<ActionResult<BillDto>> Create(CreateBillDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 if (string.IsNullOrEmpty(dto.IdempotencyKey) && Request.Headers.TryGetValue("X-Idempotency-Key", out var key))
@@ -82,13 +92,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating bill.", error = ex.Message });
+                _logger.LogError(ex, "Create bill failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error creating bill.", correlationId = CorrelationId });
             }
         }
 
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (id <= 0) return BadRequest(new { message = "Invalid bill id." });
             try
             {
                 var deleted = await _billService.DeleteAsync(CurrentBusinessId, id);
@@ -97,7 +110,8 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting bill.", error = ex.Message });
+                _logger.LogError(ex, "Delete bill failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error deleting bill.", correlationId = CorrelationId });
             }
         }
 
@@ -108,6 +122,8 @@ namespace BillingBackend.Controllers
         [HttpGet("{id}/upi-qr")]
         public async Task<ActionResult<BillUpiQrResponseDto>> GetUpiQr(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (id <= 0) return BadRequest(new { message = "Invalid bill id." });
             try
             {
                 var upiData = await _billService.GenerateUpiQrAsync(CurrentBusinessId, id);
@@ -116,7 +132,8 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error generating UPI QR for bill.", error = ex.Message });
+                _logger.LogError(ex, "GetUpiQr failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error generating UPI QR for bill.", correlationId = CorrelationId });
             }
         }
 
@@ -126,6 +143,9 @@ namespace BillingBackend.Controllers
         [HttpPost("{id}/payment")]
         public async Task<ActionResult<BillDto>> RecordPayment(int id, [FromBody] RecordBillPaymentDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (id <= 0) return BadRequest(new { message = "Invalid bill id." });
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 var updated = await _billService.RecordPaymentAsync(CurrentBusinessId, id, dto);
@@ -138,7 +158,8 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error recording bill payment.", error = ex.Message });
+                _logger.LogError(ex, "RecordPayment failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error recording bill payment.", correlationId = CorrelationId });
             }
         }
 
@@ -157,6 +178,9 @@ namespace BillingBackend.Controllers
         [HttpPut("{id}/status")]
         public async Task<ActionResult<BillDto>> UpdateStatus(int id, [FromBody] UpdateBillStatusDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (id <= 0) return BadRequest(new { message = "Invalid bill id." });
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 var updated = await _billService.UpdateStatusAsync(
@@ -170,7 +194,8 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating bill status.", error = ex.Message });
+                _logger.LogError(ex, "UpdateStatus failed. CorrelationId={CorrelationId}", CorrelationId);
+                return StatusCode(500, new { message = "Error updating bill status.", correlationId = CorrelationId });
             }
         }
     }

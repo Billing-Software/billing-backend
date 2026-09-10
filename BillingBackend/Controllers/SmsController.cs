@@ -44,7 +44,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to retrieve SMS settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Failed to retrieve SMS settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -66,7 +66,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to save SMS settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Failed to save SMS settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -96,7 +96,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to dispatch test SMS.", error = ex.Message });
+                return StatusCode(500, new { message = "Failed to dispatch test SMS.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -122,7 +122,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to dispatch invoice SMS.", error = ex.Message });
+                return StatusCode(500, new { message = "Failed to dispatch invoice SMS.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -139,7 +139,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to retrieve SMS logs.", error = ex.Message });
+                return StatusCode(500, new { message = "Failed to retrieve SMS logs.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

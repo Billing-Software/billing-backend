@@ -25,7 +25,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching categories.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching categories.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -39,7 +39,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating category.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating category.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -61,7 +61,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating category.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating category.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -76,7 +76,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting category.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting category.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

@@ -25,7 +25,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching expenses.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching expenses.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -39,7 +39,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating expense record.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating expense record.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -54,7 +54,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting expense record.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting expense record.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

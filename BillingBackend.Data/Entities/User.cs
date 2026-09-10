@@ -35,6 +35,15 @@ namespace BillingBackend.Data.Entities
 
         public DateTime? PasswordResetTokenExpiry { get; set; }
 
+        // Brute-force / OTP abuse guards (added for industrial hardening; nullable-safe defaults).
+        public int FailedLoginAttempts { get; set; } = 0;
+
+        public DateTime? LockoutEnd { get; set; }
+
+        public int PasswordResetAttemptCount { get; set; } = 0;
+
+        public DateTime? PasswordResetRequestedAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation: 1:1 with Business (this user owns a business)

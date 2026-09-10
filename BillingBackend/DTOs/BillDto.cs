@@ -19,8 +19,11 @@ namespace BillingBackend.DTOs
         [StringLength(50)]
         public string ItemType { get; set; } = "Service";
 
+        [Range(0, 100000000, ErrorMessage = "UnitPrice must be non-negative.")]
         public decimal UnitPrice { get; set; }
+        [Range(1, 100000, ErrorMessage = "Quantity must be at least 1.")]
         public int Quantity { get; set; } = 1;
+        [Range(0, 100000000, ErrorMessage = "LineTotal must be non-negative.")]
         public decimal LineTotal { get; set; }
     }
 
@@ -41,13 +44,17 @@ namespace BillingBackend.DTOs
         [StringLength(50)]
         public string BillNumber { get; set; } = string.Empty;
 
+        [Range(0, 100000000, ErrorMessage = "Subtotal must be non-negative.")]
         public decimal Subtotal { get; set; }
 
         [StringLength(50)]
         public string? DiscountCode { get; set; }
 
+        [Range(0, 100000000, ErrorMessage = "DiscountAmount must be non-negative.")]
         public decimal DiscountAmount { get; set; }
+        [Range(0, 100000000, ErrorMessage = "TaxAmount must be non-negative.")]
         public decimal TaxAmount { get; set; }
+        [Range(0.01, 100000000, ErrorMessage = "TotalAmount must be greater than zero.")]
         public decimal TotalAmount { get; set; }
 
         [StringLength(20)]
@@ -60,7 +67,9 @@ namespace BillingBackend.DTOs
 
         // Extra details for UI
         public string? CustomerName { get; set; }
+        [RegularExpression(@"^\+?[1-9]\d{7,14}$", ErrorMessage = "CustomerPhone must be valid.")]
         public string? CustomerPhone { get; set; }
+        [EmailAddress(ErrorMessage = "CustomerEmail must be a valid email.")]
         public string? CustomerEmail { get; set; }
         public string? StaffName { get; set; }
         public string? BranchName { get; set; }
@@ -88,10 +97,14 @@ namespace BillingBackend.DTOs
         [StringLength(50)]
         public string BillNumber { get; set; } = string.Empty;
 
+        [Range(0, 100000000, ErrorMessage = "Subtotal must be non-negative.")]
         public decimal Subtotal { get; set; }
         public string? DiscountCode { get; set; }
+        [Range(0, 100000000, ErrorMessage = "DiscountAmount must be non-negative.")]
         public decimal DiscountAmount { get; set; }
+        [Range(0, 100000000, ErrorMessage = "TaxAmount must be non-negative.")]
         public decimal TaxAmount { get; set; }
+        [Range(0.01, 100000000, ErrorMessage = "TotalAmount must be greater than zero.")]
         public decimal TotalAmount { get; set; }
         public string PaymentMethod { get; set; } = "Cash";
         public string Status { get; set; } = "Pending";

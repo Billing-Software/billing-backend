@@ -57,6 +57,9 @@ namespace BillingBackend.Repositories
             existing.ImageUrl = item.ImageUrl;
             existing.UpdatedAt = DateTime.UtcNow;
 
+            // Compare with the version read by the caller, rather than silently overwriting a newer stock value.
+            _context.Entry(existing).Property(x => x.RowVersion).OriginalValue = item.RowVersion;
+
             await _context.SaveChangesAsync();
             return existing;
         }

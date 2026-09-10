@@ -8,7 +8,9 @@ using BillingBackend.Data.Entities;
 using BillingBackend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace BillingBackend.Controllers
@@ -20,22 +22,24 @@ namespace BillingBackend.Controllers
     {
         private readonly BillingDbContext _context;
         private readonly IRazorpayService _razorpayService;
-        private readonly IEmailService _emailService;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<RazorpayWebhookController> _logger;
 
         public RazorpayWebhookController(
-            BillingDbContext context, 
+            BillingDbContext context,
             IRazorpayService razorpayService,
-            IEmailService emailService,
+            IServiceScopeFactory scopeFactory,
             ILogger<RazorpayWebhookController> logger)
         {
             _context = context;
             _razorpayService = razorpayService;
-            _emailService = emailService;
+            _scopeFactory = scopeFactory;
             _logger = logger;
         }
 
         [HttpPost]
+        [EnableRateLimiting("api")]
+        [RequestSizeLimit(1 * 1024 * 1024)]
         public async Task<IActionResult> HandleWebhook()
         {
             try
@@ -128,6 +132,10 @@ namespace BillingBackend.Controllers
                         {
                             await ProcessPaymentFailed(payloadProp, jsonPayload, logEntry.Id);
                         }
+                        else if (webhookEvent == "payment.captured")
+                        {
+                            await ProcessPaymentCaptured(payloadProp, jsonPayload, logEntry.Id);
+                        }
                         else
                         {
                             _logger.LogInformation("[RazorpayWebhook] Event {Event} is unhandled. Ignoring.", webhookEvent);
@@ -142,22 +150,56 @@ namespace BillingBackend.Controllers
                 catch (Exception ex)
                 {
                     logEntry.ProcessingStatus = "Failed";
-                    logEntry.FailureReason = ex.Message;
+                    logEntry.FailureReason = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
                     _context.WebhookEventLogs.Update(logEntry);
                     await _context.SaveChangesAsync();
-                    
-                    _logger.LogError(ex, "[RazorpayWebhook Error] Processing failed for event {EventId}", externalEventId);
+
+                    _logger.LogError(ex, "[RazorpayWebhook] Processing failed for event {EventId}", externalEventId);
                     // Return OK so Razorpay doesn't retry infinitely on business logic errors, since we've audited it
-                    return Ok(new { status = "failed", error = ex.Message });
+                    return Ok(new { status = "failed" });
                 }
 
                 return Ok(new { status = "success" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[RazorpayWebhook Exception] HandleWebhook crashed");
-                return StatusCode(500, new { error = ex.Message });
+                _logger.LogError(ex, "[RazorpayWebhook] HandleWebhook crashed");
+                return StatusCode(500, new { error = "Webhook processing failed." });
             }
+        }
+
+        // The webhook is the durable reconciliation path. It is deliberately idempotent because
+        // Razorpay can retry deliveries and Checkout verification may have already captured it.
+        private async Task ProcessPaymentCaptured(JsonElement payload, string rawPayload, int webhookEventId)
+        {
+            if (!payload.TryGetProperty("payment", out var payment) || !payment.TryGetProperty("entity", out var entity)) return;
+            var paymentId = entity.TryGetProperty("id", out var id) ? id.GetString() : null;
+            var orderId = entity.TryGetProperty("order_id", out var order) ? order.GetString() : null;
+            var amount = entity.TryGetProperty("amount", out var value) ? value.GetInt64() : 0;
+            var method = entity.TryGetProperty("method", out var paymentMethod) ? paymentMethod.GetString() : null;
+            if (string.IsNullOrWhiteSpace(paymentId) || string.IsNullOrWhiteSpace(orderId)) return;
+
+            var transaction = await _context.PaymentTransactions.SingleOrDefaultAsync(x => x.RazorpayOrderId == orderId);
+            if (transaction is null || transaction.Status == "Captured") return;
+            if (decimal.ToInt64(transaction.Amount * 100m) != amount)
+            {
+                _logger.LogWarning("[RazorpayWebhook] Captured payment amount mismatch for order {OrderId}.", orderId);
+                transaction.Status = "Failed"; transaction.FailureReason = "Captured webhook amount mismatch"; transaction.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                return;
+            }
+
+            var business = await _context.Businesses.SingleOrDefaultAsync(x => x.Id == transaction.BusinessId);
+            var plan = transaction.SubscriptionPlanId.HasValue
+                ? await _context.SubscriptionPlans.SingleOrDefaultAsync(x => x.Id == transaction.SubscriptionPlanId)
+                : null;
+            if (business is null || plan is null) throw new InvalidOperationException("Payment order is missing subscription context.");
+
+            var start = business.SubscriptionExpiresAt > DateTime.UtcNow ? business.SubscriptionExpiresAt.Value : DateTime.UtcNow;
+            business.ActivePlanId = plan.Id; business.AllowedBranches = plan.MaxBranches == -1 ? 999 : plan.MaxBranches; business.AllowedStaff = plan.MaxStaff == -1 ? 999 : plan.MaxStaff;
+            business.IsTrial = false; business.SubscriptionStatus = "Active"; business.SubscriptionExpiresAt = string.Equals(transaction.BillingCycle, "yearly", StringComparison.OrdinalIgnoreCase) ? start.AddYears(1) : start.AddMonths(1); business.UpdatedAt = DateTime.UtcNow;
+            transaction.RazorpayPaymentId = paymentId; transaction.PaymentMethod = method ?? "Razorpay"; transaction.RawWebhookPayload = rawPayload; transaction.WebhookEventId = webhookEventId; transaction.Status = "Captured"; transaction.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
         }
 
         private async Task ProcessSubscriptionCharged(JsonElement payload, string rawPayload, int webhookEventId)
@@ -287,34 +329,46 @@ namespace BillingBackend.Controllers
                     await _context.PaymentTransactions.AddAsync(transaction);
                     await _context.SaveChangesAsync();
 
-                    _logger.LogWarning("[RazorpayWebhook Warning] Business ID {BusinessId} payment failed. Status set to: PastDue. Reason: {Reason}", business.Id, failureReason);
+                    _logger.LogWarning("[RazorpayWebhook] Business {BusinessId} payment failed.", business.Id);
 
-                    // Send subscription billing warning notification email asynchronously (non-blocking)
+                    // Send billing warning email via a fresh scope (never use request DbContext in background thread).
+                    var businessId = business.Id;
+                    var ownerId = business.OwnerId;
+                    var failedAmount = amount;
+                    var gatewayReason = string.IsNullOrWhiteSpace(failureReason) ? "Payment failed." :
+                        failureReason.Trim()[..Math.Min(200, failureReason.Trim().Length)];
                     _ = Task.Run(async () =>
                     {
                         try
                         {
-                            var owner = await _context.Users.FirstOrDefaultAsync(u => u.Id == business.OwnerId);
-                            if (owner != null && !string.IsNullOrEmpty(owner.Email))
+                            using var scope = _scopeFactory.CreateScope();
+                            var db = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
+                            var mail = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                            var owner = await db.Users.FirstOrDefaultAsync(u => u.Id == ownerId);
+                            var biz = await db.Businesses.FirstOrDefaultAsync(b => b.Id == businessId);
+                            if (owner != null && biz != null && !string.IsNullOrEmpty(owner.Email))
                             {
+                                // Escape user-controlled values before embedding in HTML email.
+                                var safeUser = System.Net.WebUtility.HtmlEncode(owner.Username);
+                                var safeBiz = System.Net.WebUtility.HtmlEncode(biz.LegalName);
+                                var safeReason = System.Net.WebUtility.HtmlEncode(gatewayReason);
                                 var emailBody = $@"
                                     <h2>BillCom - Subscription Renewal Payment Failed!</h2>
-                                    <p>Dear {owner.Username},</p>
-                                    <p>We attempted to charge your card/UPI mandate for your subscription renewal, but the transaction failed.</p>
-                                    <p><strong>Business Store:</strong> {business.LegalName}</p>
-                                    <p><strong>Failed Amount:</strong> ₹{amount}</p>
-                                    <p><strong>Gateway Reason:</strong> {failureReason}</p>
-                                    <p>To avoid service disruption and lockout, please login to your billing manager page or contact platform support to resolve this payment issue.</p>
+                                    <p>Dear {safeUser},</p>
+                                    <p>We attempted to charge your payment method for your subscription renewal, but the transaction failed.</p>
+                                    <p><strong>Failed Amount:</strong> ₹{failedAmount}</p>
+                                    <p><strong>Gateway Reason:</strong> {safeReason}</p>
+                                    <p>To avoid service disruption, please login to your billing page or contact support.</p>
                                     <br/>
-                                    <p>Best regards,<br/>BillCom Support Operations Team</p>";
+                                    <p>Best regards,<br/>BillCom Support Team</p>";
 
-                                await _emailService.SendEmailAsync(owner.Email, "BillCom - Action Required: Subscription Payment Failed", emailBody);
-                                _logger.LogInformation("[RazorpayWebhook Success] Sent billing failure notification email to: {Email} for Business ID: {BusinessId}", owner.Email, business.Id);
+                                await mail.SendEmailAsync(owner.Email, "BillCom - Action Required: Subscription Payment Failed", emailBody);
+                                _logger.LogInformation("[RazorpayWebhook] Billing failure email sent for business {BusinessId}.", businessId);
                             }
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "[RazorpayWebhook Error] Failed to send payment failure notification email for Business ID: {BusinessId}", business.Id);
+                            _logger.LogError(ex, "[RazorpayWebhook] Failed to send payment failure email for business {BusinessId}.", businessId);
                         }
                     });
                 }

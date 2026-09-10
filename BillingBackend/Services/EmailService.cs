@@ -3,20 +3,26 @@ using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace BillingBackend.Services
 {
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _configuration;
+        private readonly ILogger<EmailService> _logger;
 
-        public EmailService(IConfiguration configuration)
+        public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
             _configuration = configuration;
+            _logger = logger;
         }
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
+            if (string.IsNullOrWhiteSpace(toEmail))
+                throw new ArgumentException("Recipient email is required.", nameof(toEmail));
+
             var smtpSection = _configuration.GetSection("Smtp");
             var host = smtpSection["Host"] ?? "";
             var portStr = smtpSection["Port"] ?? "587";
@@ -29,15 +35,10 @@ namespace BillingBackend.Services
             int port = int.TryParse(portStr, out var p) ? p : 587;
             bool enableSsl = bool.TryParse(enableSslStr, out var s) ? s : true;
 
-            // If SMTP username/password are empty, fall back to console logging so the app doesn't crash on startup/testing.
+            // Fail closed when SMTP is not configured in production; log only metadata (never body/PII).
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(host))
             {
-                Console.WriteLine("\n========================================================");
-                Console.WriteLine("[EMAIL SERVICE WARNING] SMTP credentials are not configured in appsettings.json.");
-                Console.WriteLine($"[EMAIL SERVICE SIMULATION] Sending email to: {toEmail}");
-                Console.WriteLine($"[EMAIL SERVICE SIMULATION] Subject: {subject}");
-                Console.WriteLine($"[EMAIL SERVICE SIMULATION] Reset Code in body");
-                Console.WriteLine("========================================================\n");
+                _logger.LogWarning("SMTP is not configured. Email to {Domain} skipped.", GetDomain(toEmail));
                 return;
             }
 
@@ -58,6 +59,12 @@ namespace BillingBackend.Services
 
                 await smtpClient.SendMailAsync(mailMessage);
             }
+        }
+
+        private static string GetDomain(string email)
+        {
+            var at = email.LastIndexOf('@');
+            return at >= 0 ? email[(at + 1)..] : "unknown";
         }
     }
 }

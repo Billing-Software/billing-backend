@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using BillingBackend.Validation;
 
 namespace BillingBackend.DTOs
 {
@@ -17,6 +18,7 @@ namespace BillingBackend.DTOs
         public string EmpCode { get; set; } = string.Empty;
 
         [StringLength(256)]
+        [RegularExpression(ValidationPatterns.PhoneIntl, ErrorMessage = "Contact must be a valid phone number.")]
         public string? Contact { get; set; }
 
         [StringLength(50)]
@@ -31,6 +33,7 @@ namespace BillingBackend.DTOs
         public int? BranchId { get; set; }
         public string? BranchName { get; set; }
 
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be at least 6 characters.")]
         public string? Password { get; set; }
     }
 }

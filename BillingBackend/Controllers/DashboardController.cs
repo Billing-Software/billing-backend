@@ -32,7 +32,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error loading dashboard metrics.", error = ex.Message });
+                return StatusCode(500, new { message = "Error loading dashboard metrics.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

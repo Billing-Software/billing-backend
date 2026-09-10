@@ -26,7 +26,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching inventory items.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching inventory items.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -41,7 +41,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching inventory details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching inventory details.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -59,7 +59,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating inventory item.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating inventory item.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -78,7 +78,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating inventory item.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating inventory item.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -93,7 +93,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting inventory item.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting inventory item.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

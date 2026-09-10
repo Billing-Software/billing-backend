@@ -35,7 +35,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error generating GST report summary.", error = ex.Message });
+                return StatusCode(500, new { message = "Error generating GST report summary.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -58,7 +58,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error exporting GST report CSV.", error = ex.Message });
+                return StatusCode(500, new { message = "Error exporting GST report CSV.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

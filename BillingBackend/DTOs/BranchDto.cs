@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using BillingBackend.Validation;
 
 namespace BillingBackend.DTOs
 {
@@ -18,9 +19,11 @@ namespace BillingBackend.DTOs
         public string? City { get; set; }
 
         [StringLength(20)]
+        [RegularExpression(ValidationPatterns.PincodeIn, ErrorMessage = "PostalCode must be a valid 6-digit Indian PIN code.")]
         public string? PostalCode { get; set; }
 
         [StringLength(20)]
+        [RegularExpression(ValidationPatterns.PhoneIntl, ErrorMessage = "Phone must be a valid phone number.")]
         public string? Phone { get; set; }
 
         public bool IsActive { get; set; } = true;

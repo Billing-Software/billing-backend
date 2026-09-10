@@ -76,6 +76,16 @@ namespace BillingBackend.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(b => b.OwnerId).IsUnique();
+                entity.HasOne(b => b.ActivePlan)
+                    .WithMany()
+                    .HasForeignKey(b => b.ActivePlanId)
+                    .OnDelete(DeleteBehavior.NoAction);
+                entity.Property(b => b.RowVersion).IsRowVersion();
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_Businesses_SubscriptionStatus", "[SubscriptionStatus] IN ('Trial','Active','PastDue','Cancelled','Suspended','TrialExpired','Expired','Inactive')");
+                });
             });
 
             // ===== Branches =====
@@ -88,6 +98,12 @@ namespace BillingBackend.Data
 
                 // Unique branch name per business
                 entity.HasIndex(br => new { br.BusinessId, br.Name }).IsUnique();
+
+                // Alternate key powers the composite tenant FKs (Bills, printer settings):
+                // every branch reference is validated against (BusinessId, Id) in the database.
+                // Name matches 004_IndustrialHardening so fresh and migrated DBs look identical.
+                entity.HasAlternateKey(br => new { br.BusinessId, br.Id })
+                    .HasName("UQ_Branches_BusinessId_Id");
             });
 
             // ===== Customers =====
@@ -97,6 +113,10 @@ namespace BillingBackend.Data
                     .WithMany(b => b.Customers)
                     .HasForeignKey(c => c.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                // Alternate key powers the composite tenant FK (Bills -> Customers).
+                entity.HasAlternateKey(c => new { c.BusinessId, c.Id })
+                    .HasName("UQ_Customers_BusinessId_Id");
             });
 
             // ===== Services =====
@@ -121,6 +141,15 @@ namespace BillingBackend.Data
 
                 // Unique SKU per business
                 entity.HasIndex(i => new { i.BusinessId, i.SKU }).IsUnique();
+
+                // Low-stock alert access path (mirrors 004_IndustrialHardening).
+                entity.HasIndex(i => new { i.BusinessId, i.CurrentStock })
+                    .HasDatabaseName("IX_InventoryItems_BusinessId_CurrentStock");
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_InventoryItems_Stock", "[CurrentStock] >= 0 AND [ReorderLevel] >= 0");
+                });
             });
 
             // ===== StaffMembers =====
@@ -136,6 +165,10 @@ namespace BillingBackend.Data
                     .HasForeignKey(s => s.UserId)
                     .OnDelete(DeleteBehavior.NoAction);
 
+                // Alternate key powers the composite tenant FK (Bills -> StaffMembers).
+                entity.HasAlternateKey(s => new { s.BusinessId, s.Id })
+                    .HasName("UQ_StaffMembers_BusinessId_Id");
+
                 // Unique employee code per business
                 entity.HasIndex(s => new { s.BusinessId, s.EmpCode }).IsUnique();
             });
@@ -150,17 +183,24 @@ namespace BillingBackend.Data
 
                 entity.HasOne(bill => bill.Branch)
                     .WithMany(br => br.Bills)
-                    .HasForeignKey(bill => bill.BranchId)
+                    .HasForeignKey(bill => new { bill.BusinessId, bill.BranchId })
+                    .HasPrincipalKey(br => new { br.BusinessId, br.Id })
+                    .HasConstraintName("FK_Bills_Branches_Tenant")
                     .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(bill => bill.Customer)
                     .WithMany(c => c.Bills)
-                    .HasForeignKey(bill => bill.CustomerId)
+                    .HasForeignKey(bill => new { bill.BusinessId, bill.CustomerId })
+                    .HasPrincipalKey(c => new { c.BusinessId, c.Id })
+                    .HasConstraintName("FK_Bills_Customers_Tenant")
                     .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(bill => bill.CreatedByStaff)
                     .WithMany(s => s.CreatedBills)
-                    .HasForeignKey(bill => bill.CreatedByStaffId)
+                    .HasForeignKey(bill => new { bill.BusinessId, bill.CreatedByStaffId })
+                    .HasPrincipalKey(s => new { s.BusinessId, s.Id })
+                    .HasConstraintName("FK_Bills_StaffMembers_Tenant")
+                    .IsRequired(false)
                     .OnDelete(DeleteBehavior.SetNull);
 
                 // Unique bill number per business
@@ -170,6 +210,18 @@ namespace BillingBackend.Data
                 entity.HasIndex(bill => new { bill.BusinessId, bill.IdempotencyKey })
                     .IsUnique()
                     .HasFilter("[IdempotencyKey] IS NOT NULL");
+                entity.Property(bill => bill.RowVersion).IsRowVersion();
+
+                // Tenant-first reporting access path (mirrors 004_IndustrialHardening).
+                entity.HasIndex(bill => new { bill.BusinessId, bill.CreatedAt })
+                    .HasDatabaseName("IX_Bills_BusinessId_CreatedAt")
+                    .IsDescending(false, true);
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_Bills_Amounts", "[Subtotal] >= 0 AND [DiscountAmount] >= 0 AND [TaxAmount] >= 0 AND [TotalAmount] >= 0");
+                    t.HasCheckConstraint("CK_Bills_Status", "[Status] IN ('Pending','Paid','Failed','Cancelled','Refunded','PartialRefund','Completed')");
+                });
             });
 
             // ===== BillItems =====
@@ -184,6 +236,11 @@ namespace BillingBackend.Data
                     .WithMany(s => s.BillItems)
                     .HasForeignKey(bi => bi.ServiceId)
                     .OnDelete(DeleteBehavior.NoAction);
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_BillItems_Values", "[Quantity] > 0 AND [UnitPrice] >= 0 AND [LineTotal] >= 0 AND [TaxRate] BETWEEN 0 AND 100");
+                });
             });
 
             // ===== BusinessPaymentSettings =====
@@ -277,6 +334,11 @@ namespace BillingBackend.Data
                 entity.HasIndex(cl => cl.BusinessId);
                 entity.HasIndex(cl => cl.CustomerId);
                 entity.HasIndex(cl => cl.TransactionDate);
+
+                // Khata statement access path (mirrors 004_IndustrialHardening).
+                entity.HasIndex(cl => new { cl.BusinessId, cl.CustomerId, cl.TransactionDate })
+                    .HasDatabaseName("IX_CustomerLedgers_BusinessId_CustomerId_TransactionDate")
+                    .IsDescending(false, false, true);
             });
 
             // ===== DiscountCoupons =====
@@ -308,6 +370,10 @@ namespace BillingBackend.Data
                     .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasIndex(w => new { w.BusinessId, w.Code }).IsUnique();
+
+                // Alternate key powers the composite tenant FKs (StockTransfers).
+                entity.HasAlternateKey(w => new { w.BusinessId, w.Id })
+                    .HasName("UQ_Warehouses_BusinessId_Id");
             });
 
             // ===== StockTransfers =====
@@ -320,15 +386,24 @@ namespace BillingBackend.Data
 
                 entity.HasOne(st => st.SourceWarehouse)
                     .WithMany()
-                    .HasForeignKey(st => st.SourceWarehouseId)
+                    .HasForeignKey(st => new { st.BusinessId, st.SourceWarehouseId })
+                    .HasPrincipalKey(w => new { w.BusinessId, w.Id })
+                    .HasConstraintName("FK_StockTransfers_SourceWarehouse_Tenant")
                     .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(st => st.DestinationWarehouse)
                     .WithMany()
-                    .HasForeignKey(st => st.DestinationWarehouseId)
+                    .HasForeignKey(st => new { st.BusinessId, st.DestinationWarehouseId })
+                    .HasPrincipalKey(w => new { w.BusinessId, w.Id })
+                    .HasConstraintName("FK_StockTransfers_DestinationWarehouse_Tenant")
                     .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasIndex(st => new { st.BusinessId, st.TransferNumber }).IsUnique();
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_StockTransfers_Warehouses", "[SourceWarehouseId] <> [DestinationWarehouseId]");
+                });
             });
 
             // ===== StockTransferItems =====
@@ -422,6 +497,19 @@ namespace BillingBackend.Data
                     .WithMany(p => p.Items)
                     .HasForeignKey(pi => pi.PurchaseId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                // Optional stock link: history survives inventory cleanup, dangling ids are blocked.
+                entity.HasOne(pi => pi.InventoryItem)
+                    .WithMany()
+                    .HasForeignKey(pi => pi.InventoryItemId)
+                    .HasConstraintName("FK_PurchaseItems_InventoryItems")
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_PurchaseItems_Values", "[Quantity] > 0 AND [UnitPrice] >= 0 AND [LineTotal] >= 0");
+                });
             });
 
             // ===== UserRefreshTokens =====
@@ -451,12 +539,33 @@ namespace BillingBackend.Data
                 entity.HasIndex(a => a.BusinessId);
                 entity.HasIndex(a => a.CreatedAt);
                 entity.HasIndex(a => a.CorrelationId);
+
+                // Tenant audit-trail access path (mirrors 004_IndustrialHardening).
+                entity.HasIndex(a => new { a.BusinessId, a.CreatedAt })
+                    .HasDatabaseName("IX_AuditLogs_BusinessId_CreatedAt")
+                    .IsDescending(false, true);
             });
 
             // ===== PaymentTransactions =====
             modelBuilder.Entity<PaymentTransaction>(entity =>
             {
                 entity.Property(p => p.Amount).HasPrecision(18, 2);
+                entity.HasOne(p => p.Business).WithMany().HasForeignKey(p => p.BusinessId).OnDelete(DeleteBehavior.NoAction);
+                entity.HasOne(p => p.SubscriptionPlan).WithMany().HasForeignKey(p => p.SubscriptionPlanId).OnDelete(DeleteBehavior.NoAction);
+                entity.HasIndex(p => p.RazorpayOrderId).IsUnique().HasFilter("[RazorpayOrderId] IS NOT NULL");
+                entity.HasIndex(p => p.RazorpayPaymentId).IsUnique().HasFilter("[RazorpayPaymentId] IS NOT NULL");
+                entity.Property(p => p.RowVersion).IsRowVersion();
+
+                // Tenant-first reporting access path (mirrors 004_IndustrialHardening).
+                entity.HasIndex(p => new { p.BusinessId, p.CreatedAt })
+                    .HasDatabaseName("IX_PaymentTransactions_BusinessId_CreatedAt")
+                    .IsDescending(false, true);
+
+                entity.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_PaymentTransactions_Amount", "[Amount] >= 0");
+                    t.HasCheckConstraint("CK_PaymentTransactions_Status", "[Status] IN ('Created','Authorized','Captured','Failed','Refunded')");
+                });
             });
 
             // ===== SubscriptionPlans =====
@@ -506,6 +615,10 @@ namespace BillingBackend.Data
                     .HasFilter("[ExternalEventId] IS NOT NULL");
                 entity.HasIndex(w => w.ProcessingStatus);
                 entity.HasIndex(w => w.CreatedAt);
+
+                // Retention-job access path (mirrors 004_IndustrialHardening).
+                entity.HasIndex(w => new { w.ProcessingStatus, w.ProcessedAt })
+                    .HasDatabaseName("IX_WebhookEventLogs_Completed_ProcessedAt");
             });
 
             // ===== Seed Subscription Plans =====

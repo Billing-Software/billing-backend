@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
 using BillingBackend.Data;
@@ -12,11 +13,19 @@ namespace BillingBackend.Controllers
 {
     public class UpgradeSubscriptionRequestDto
     {
+        [Required]
+        [Range(1, int.MaxValue, ErrorMessage = "PlanId must be positive.")]
         public int PlanId { get; set; }
+        [Required]
+        [RegularExpression("^(monthly|yearly)$", ErrorMessage = "BillingCycle must be monthly or yearly.")]
         public string BillingCycle { get; set; } = "monthly"; // monthly or yearly
+        [StringLength(50)]
         public string? PaymentMethod { get; set; } = "Razorpay";
+        [StringLength(100)]
         public string? RazorpayPaymentId { get; set; }
+        [StringLength(100)]
         public string? RazorpayOrderId { get; set; }
+        [StringLength(500)]
         public string? RazorpaySignature { get; set; }
     }
 
@@ -143,11 +152,13 @@ namespace BillingBackend.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[SubscriptionController] Error retrieving subscription details");
-                return StatusCode(500, new { message = "Error loading subscription details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error loading subscription details.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
-        [HttpPost("upgrade")]
+        // Subscription activation is intentionally performed only by the verified Razorpay
+        // payment flow (or its signed payment.captured webhook), never by a client request.
+        [NonAction]
         public async Task<IActionResult> UpgradeSubscription([FromBody] UpgradeSubscriptionRequestDto dto)
         {
             try
@@ -219,7 +230,7 @@ namespace BillingBackend.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[SubscriptionController] Error upgrading subscription");
-                return StatusCode(500, new { message = "Error upgrading subscription plan.", error = ex.Message });
+                return StatusCode(500, new { message = "Error upgrading subscription plan.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

@@ -75,6 +75,9 @@ namespace BillingBackend.Data.Entities
 
         public DateTime? UpdatedAt { get; set; }
 
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
         // Navigation
         [ForeignKey(nameof(BusinessId))]
         public Business Business { get; set; } = null!;

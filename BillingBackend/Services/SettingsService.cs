@@ -581,6 +581,13 @@ namespace BillingBackend.Services
         {
             try
             {
+                // IDOR guard: BranchId must belong to this business.
+                if (dto.BranchId.HasValue)
+                {
+                    var branchOk = await _context.Branches.AnyAsync(b => b.Id == dto.BranchId.Value && b.BusinessId == businessId);
+                    if (!branchOk)
+                        throw new InvalidOperationException("Selected branch does not belong to this business.");
+                }
                 var printer = await _context.BusinessPrinterSettings
                     .FirstOrDefaultAsync(p => p.BusinessId == businessId && (dto.Id != null ? p.Id == dto.Id : p.BranchId == dto.BranchId));
 

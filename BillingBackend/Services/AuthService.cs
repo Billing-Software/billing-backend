@@ -1,9 +1,9 @@
 using BillingBackend.Data.Entities;
 using BillingBackend.Repositories;
 using BillingBackend.DTOs;
+using BillingBackend.Security;
+using Microsoft.Extensions.Logging;
 using System;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace BillingBackend.Services
@@ -15,39 +15,53 @@ namespace BillingBackend.Services
         private readonly ITokenService _tokenService;
         private readonly IStaffRepository _staffRepository;
         private readonly IEmailService _emailService;
+        private readonly ILogger<AuthService> _logger;
 
-        public AuthService(IUserRepository userRepository, IBusinessRepository businessRepository, ITokenService tokenService, IStaffRepository staffRepository, IEmailService emailService)
+        private const int MaxFailedLogins = 5;
+        private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+        private const int MaxOtpAttempts = 5;
+        private const int MaxOtpRequestsPerWindow = 3;
+        private static readonly TimeSpan OtpRequestWindow = TimeSpan.FromMinutes(15);
+
+        public AuthService(
+            IUserRepository userRepository,
+            IBusinessRepository businessRepository,
+            ITokenService tokenService,
+            IStaffRepository staffRepository,
+            IEmailService emailService,
+            ILogger<AuthService> logger)
         {
             _userRepository = userRepository;
             _businessRepository = businessRepository;
             _tokenService = tokenService;
             _staffRepository = staffRepository;
             _emailService = emailService;
+            _logger = logger;
         }
 
         public async Task<AuthResponseDto?> RegisterAsync(RegisterDto registerDto)
         {
-            // Check if username or email already exists
+            // Server-authoritative role/plan: never trust client Role/PlanId for self-service.
+            registerDto.Role = "Owner";
+            registerDto.PlanId = 1;
+
+            var (pwOk, pwError) = PasswordPolicy.Validate(registerDto.Password);
+            if (!pwOk)
+                throw new InvalidOperationException(pwError ?? "Password does not meet policy.");
+
+            // Generic existence check (avoid distinguishing which field exists in error detail where possible).
             if (await _userRepository.GetByUsernameAsync(registerDto.Username) != null)
-            {
                 throw new InvalidOperationException("Username already exists.");
-            }
 
             if (await _userRepository.GetByEmailAsync(registerDto.Email) != null)
-            {
                 throw new InvalidOperationException("Email already exists.");
-            }
 
-            using var hmac = new HMACSHA512();
-            var passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerDto.Password));
-            var passwordSalt = hmac.Key;
+            PasswordHasher.CreateHash(registerDto.Password, out var passwordHash, out var passwordSalt);
 
             // Use transactional registration (User + Business + Default Branch)
             var result = await _userRepository.RegisterUserAndBusinessAsync(registerDto, passwordHash, passwordSalt);
             if (result == null)
-            {
                 throw new InvalidOperationException("Registration failed.");
-            }
 
             var dummyUser = new User
             {
@@ -72,13 +86,10 @@ namespace BillingBackend.Services
             await _userRepository.SaveChangesAsync();
 
             var business = await _businessRepository.GetByIdAsync(result.BusinessId);
-            bool onboardingPending = false;
-            if (business != null)
-            {
-                onboardingPending = string.IsNullOrEmpty(business.Address) || 
-                                    string.IsNullOrEmpty(business.City) || 
-                                    string.IsNullOrEmpty(business.Phone);
-            }
+            bool onboardingPending = business != null &&
+                (string.IsNullOrEmpty(business.Address) ||
+                 string.IsNullOrEmpty(business.City) ||
+                 string.IsNullOrEmpty(business.Phone));
 
             return new AuthResponseDto
             {
@@ -96,30 +107,39 @@ namespace BillingBackend.Services
         public async Task<AuthResponseDto?> LoginAsync(LoginDto loginDto)
         {
             var user = await _userRepository.GetByEmailAsync(loginDto.Email);
-
             if (user == null)
             {
-                var pending = await _userRepository.GetPendingRegistrationByEmailAsync(loginDto.Email);
-                if (pending != null)
-                {
-                    throw new InvalidOperationException("Account activation pending: Please complete your subscription payment on our web portal to activate your account.");
-                }
-
-                Console.WriteLine($"[AUTH_DEBUG] Login failed: User identity '{loginDto.Email}' not found in database by email.");
+                // Generic failure — do not reveal whether email exists or activation is pending.
+                _logger.LogWarning("Login failed: unknown email.");
                 return null;
             }
 
-            using var hmac = new HMACSHA512(user.PasswordSalt);
-            var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(loginDto.Password));
+            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
+                throw new InvalidOperationException($"Account temporarily locked. Try again after {user.LockoutEnd.Value:u}.");
 
-            for (int i = 0; i < computedHash.Length; i++)
+            if (!PasswordHasher.Verify(loginDto.Password, user.PasswordHash, user.PasswordSalt))
             {
-                if (computedHash[i] != user.PasswordHash[i])
+                user.FailedLoginAttempts++;
+                if (user.FailedLoginAttempts >= MaxFailedLogins)
                 {
-                    Console.WriteLine($"[AUTH_DEBUG] Login failed: Password hash mismatch for user '{user.Username}'.");
-                    return null;
+                    user.LockoutEnd = DateTime.UtcNow.Add(LockoutDuration);
+                    user.FailedLoginAttempts = 0;
+                    _logger.LogWarning("Account locked due to repeated failures. UserId={UserId}", user.Id);
                 }
+                await _userRepository.SaveChangesAsync();
+                return null;
             }
+
+            // Transparent upgrade of legacy HMAC hashes to PBKDF2.
+            if (PasswordHasher.IsLegacyHash(user.PasswordHash, user.PasswordSalt))
+            {
+                PasswordHasher.CreateHash(loginDto.Password, out var nh, out var ns);
+                user.PasswordHash = nh;
+                user.PasswordSalt = ns;
+            }
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
+            await _userRepository.SaveChangesAsync();
 
             // Fetch the business details for this owner or staff member
             int businessId = 0;
@@ -132,14 +152,10 @@ namespace BillingBackend.Services
                 int dbBusinessId = loginDto.BusinessId.Value - 1000;
                 var staff = await _staffRepository.GetByUserIdAndBusinessIdAsync(user.Id, dbBusinessId);
                 if (staff == null)
-                {
                     throw new InvalidOperationException($"You do not have access to Business ID {loginDto.BusinessId.Value}.");
-                }
-                
+
                 if (staff.Status == "Inactive")
-                {
                     throw new InvalidOperationException("Access denied: Staff account is suspended.");
-                }
 
                 businessId = staff.BusinessId;
                 staffId = staff.Id;
@@ -171,9 +187,7 @@ namespace BillingBackend.Services
             {
                 var business = await _businessRepository.GetByIdAsync(businessId);
                 if (business != null && business.IsSuspended)
-                {
                     throw new InvalidOperationException("Your business account has been suspended. Please contact platform support.");
-                }
             }
 
             var token = _tokenService.CreateToken(user, businessId, staffId);
@@ -196,8 +210,8 @@ namespace BillingBackend.Services
                 var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
                 if (business != null)
                 {
-                    onboardingPending = string.IsNullOrEmpty(business.Address) || 
-                                        string.IsNullOrEmpty(business.City) || 
+                    onboardingPending = string.IsNullOrEmpty(business.Address) ||
+                                        string.IsNullOrEmpty(business.City) ||
                                         string.IsNullOrEmpty(business.Phone);
                 }
             }
@@ -229,31 +243,43 @@ namespace BillingBackend.Services
         public async Task<string?> ForgotPasswordAsync(string email)
         {
             var user = await _userRepository.GetByEmailAsync(email);
+            // Always behave identically to prevent enumeration; only send mail when user exists.
             if (user == null)
+                return "sent";
+
+            var now = DateTime.UtcNow;
+            if (user.PasswordResetRequestedAt.HasValue &&
+                now - user.PasswordResetRequestedAt.Value < OtpRequestWindow &&
+                user.PasswordResetAttemptCount >= MaxOtpRequestsPerWindow)
             {
-                return null;
+                // Throttle silently — still return success to avoid oracle.
+                _logger.LogWarning("Password reset throttled. UserId={UserId}", user.Id);
+                return "sent";
             }
 
-            // Generate a 6-digit code
-            var random = new Random();
-            var code = random.Next(100000, 999999).ToString();
+            if (!user.PasswordResetRequestedAt.HasValue ||
+                now - user.PasswordResetRequestedAt.Value >= OtpRequestWindow)
+            {
+                user.PasswordResetAttemptCount = 0;
+            }
 
-            user.PasswordResetToken = code;
-            user.PasswordResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
-
+            var code = OtpHelper.GenerateNumericCode(6);
+            user.PasswordResetToken = OtpHelper.Hash(code);
+            user.PasswordResetTokenExpiry = now.AddMinutes(10);
+            user.PasswordResetRequestedAt = now;
+            user.PasswordResetAttemptCount++;
             await _userRepository.SaveChangesAsync();
 
-            // Prepare email template
             var subject = "BillCom - Password Reset Code";
             var body = $@"
                 <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
                     <h2 style='color: #006a61; text-align: center; font-family: Outfit, sans-serif;'>BillCom</h2>
                     <p>Hello,</p>
-                    <p>We received a request to reset your password. Use the verification code below to complete the reset process:</p>
+                    <p>We received a request to reset your password. Use the verification code below:</p>
                     <div style='background-color: #f8f9ff; border: 1px dashed #006a61; padding: 15px; text-align: center; font-size: 26px; font-weight: bold; letter-spacing: 4px; color: #0b1c30; border-radius: 6px; margin: 20px 0;'>
                         {code}
                     </div>
-                    <p style='font-size: 11px; color: #7c839b;'>This code is valid for 15 minutes. If you did not request this, you can safely ignore this email.</p>
+                    <p style='font-size: 11px; color: #7c839b;'>This code is valid for 10 minutes. If you did not request this, you can safely ignore this email.</p>
                 </div>";
 
             try
@@ -262,74 +288,90 @@ namespace BillingBackend.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"\n========================================");
-                Console.WriteLine($"[EMAIL SERVICE ERROR] Failed to send email via SMTP: {ex.Message}");
-                Console.WriteLine($"[EMAIL SERVICE FALLBACK] Reset Code: {code}");
-                Console.WriteLine($"========================================\n");
+                // Never log or return the code. Email failures are server-side only.
+                _logger.LogError(ex, "Failed to send password reset email. UserId={UserId}", user.Id);
             }
 
-            return code;
+            // Never return the code to the caller.
+            return "sent";
         }
 
         public async Task<bool> ResetPasswordAsync(string email, string token, string newPassword)
         {
-            var user = await _userRepository.GetByEmailAsync(email);
-            if (user == null || user.PasswordResetToken != token || user.PasswordResetTokenExpiry < DateTime.UtcNow)
-            {
+            var (pwOk, _) = PasswordPolicy.Validate(newPassword);
+            if (!pwOk)
                 return false;
-            }
 
-            using var hmac = new HMACSHA512();
-            user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(newPassword));
-            user.PasswordSalt = hmac.Key;
+            var user = await _userRepository.GetByEmailAsync(email);
+            if (user == null || string.IsNullOrWhiteSpace(user.PasswordResetToken) ||
+                user.PasswordResetTokenExpiry < DateTime.UtcNow)
+                return false;
+
+            if (!OtpHelper.Verify(token, user.PasswordResetToken))
+                return false;
+
+            PasswordHasher.CreateHash(newPassword, out var nh, out var ns);
+            user.PasswordHash = nh;
+            user.PasswordSalt = ns;
 
             user.PasswordResetToken = null;
             user.PasswordResetTokenExpiry = null;
-
+            user.PasswordResetAttemptCount = 0;
+            user.PasswordResetRequestedAt = null;
+            user.FailedLoginAttempts = 0;
+            user.LockoutEnd = null;
             await _userRepository.SaveChangesAsync();
+
+            // Revoke all sessions on credential change (industrial session hygiene).
+            await _userRepository.RevokeAllRefreshTokensAsync(user.Id);
             return true;
         }
 
         public async Task<bool> ChangePasswordAsync(int userId, string currentPassword, string newPassword)
         {
+            var (pwOk, _) = PasswordPolicy.Validate(newPassword);
+            if (!pwOk)
+                return false;
+
             var user = await _userRepository.GetByIdAsync(userId);
             if (user == null)
-            {
                 return false;
-            }
 
-            using var hmac = new HMACSHA512(user.PasswordSalt);
-            var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(currentPassword));
+            if (!PasswordHasher.Verify(currentPassword, user.PasswordHash, user.PasswordSalt))
+                return false;
 
-            for (int i = 0; i < computedHash.Length; i++)
-            {
-                if (computedHash[i] != user.PasswordHash[i])
-                {
-                    return false;
-                }
-            }
-
-            using var newHmac = new HMACSHA512();
-            user.PasswordHash = newHmac.ComputeHash(Encoding.UTF8.GetBytes(newPassword));
-            user.PasswordSalt = newHmac.Key;
-
+            PasswordHasher.CreateHash(newPassword, out var nh, out var ns);
+            user.PasswordHash = nh;
+            user.PasswordSalt = ns;
             await _userRepository.SaveChangesAsync();
+
+            await _userRepository.RevokeAllRefreshTokensAsync(user.Id);
             return true;
         }
 
         public async Task<AuthResponseDto?> RefreshTokenAsync(TokenRefreshDto refreshDto)
         {
+            if (string.IsNullOrWhiteSpace(refreshDto.RefreshToken))
+                return null;
+
             var dbRefreshToken = await _userRepository.GetRefreshTokenAsync(refreshDto.RefreshToken);
-            if (dbRefreshToken == null || dbRefreshToken.IsRevoked || dbRefreshToken.ExpiryTime < DateTime.UtcNow)
+            if (dbRefreshToken == null)
+                return null;
+
+            // Reuse / theft detection: revoked or expired token presented => revoke entire family.
+            if (dbRefreshToken.IsRevoked || dbRefreshToken.ExpiryTime < DateTime.UtcNow)
             {
+                try { await _userRepository.RevokeAllRefreshTokensAsync(dbRefreshToken.UserId); } catch { }
+                _logger.LogWarning("Refresh token reuse detected. UserId={UserId}", dbRefreshToken.UserId);
                 return null;
             }
 
             var user = dbRefreshToken.User;
             if (user == null)
-            {
                 return null;
-            }
+
+            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
+                throw new InvalidOperationException("Account temporarily locked.");
 
             // Fetch the business details for this owner or staff member
             int businessId = 0;
@@ -352,14 +394,10 @@ namespace BillingBackend.Services
             {
                 var staff = await _staffRepository.GetByUserIdAsync(user.Id);
                 if (staff == null)
-                {
                     return null;
-                }
-                
+
                 if (staff.Status == "Inactive")
-                {
                     throw new InvalidOperationException("Access denied: Staff account is suspended.");
-                }
 
                 businessId = staff.BusinessId;
                 staffId = staff.Id;
@@ -372,16 +410,15 @@ namespace BillingBackend.Services
             {
                 var business = await _businessRepository.GetByIdAsync(businessId);
                 if (business != null && business.IsSuspended)
-                {
                     throw new InvalidOperationException("Your business account has been suspended. Please contact platform support.");
-                }
             }
 
             // Generate new access token
             var token = _tokenService.CreateToken(user, businessId, staffId);
 
-            // Rotate refresh token: delete the old one
-            await _userRepository.RemoveRefreshTokenAsync(dbRefreshToken);
+            // Rotate refresh token: revoke (not just delete) the old one for reuse detection.
+            dbRefreshToken.IsRevoked = true;
+            await _userRepository.SaveChangesAsync();
 
             // Generate new refresh token
             var newRefreshTokenString = _tokenService.GenerateRefreshToken();
@@ -402,8 +439,8 @@ namespace BillingBackend.Services
                 var business = await _businessRepository.GetByOwnerIdAsync(user.Id);
                 if (business != null)
                 {
-                    onboardingPending = string.IsNullOrEmpty(business.Address) || 
-                                        string.IsNullOrEmpty(business.City) || 
+                    onboardingPending = string.IsNullOrEmpty(business.Address) ||
+                                        string.IsNullOrEmpty(business.City) ||
                                         string.IsNullOrEmpty(business.Phone);
                 }
             }
@@ -420,6 +457,18 @@ namespace BillingBackend.Services
                 StaffId = staffId,
                 OnboardingPending = onboardingPending
             };
+        }
+
+        public async Task<bool> LogoutAsync(string refreshToken)
+        {
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return false;
+            var stored = await _userRepository.GetRefreshTokenAsync(refreshToken);
+            if (stored == null)
+                return true;
+            stored.IsRevoked = true;
+            await _userRepository.SaveChangesAsync();
+            return true;
         }
     }
 }

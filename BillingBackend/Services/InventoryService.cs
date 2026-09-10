@@ -80,6 +80,8 @@ namespace BillingBackend.Services
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(dto.RowVersion))
+                    throw new InvalidOperationException("RowVersion is required when updating inventory. Refresh the item and try again.");
                 var existing = await _inventoryRepository.GetBySKUAsync(businessId, dto.SKU);
                 if (existing != null && existing.Id != dto.Id)
                 {
@@ -96,6 +98,7 @@ namespace BillingBackend.Services
                     Unit = dto.Unit,
                     ReorderLevel = dto.ReorderLevel,
                     ImageUrl = dto.ImageUrl
+                    ,RowVersion = Convert.FromBase64String(dto.RowVersion)
                 };
 
                 var updated = await _inventoryRepository.UpdateAsync(item);
@@ -134,6 +137,7 @@ namespace BillingBackend.Services
                 Unit = i.Unit,
                 ReorderLevel = i.ReorderLevel,
                 ImageUrl = i.ImageUrl
+                ,RowVersion = Convert.ToBase64String(i.RowVersion)
             };
         }
     }

@@ -54,7 +54,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error resolving features.", error = ex.Message });
+                return StatusCode(500, new { message = "Error resolving features.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -72,7 +72,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving features.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving features.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

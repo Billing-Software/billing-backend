@@ -26,7 +26,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching services list.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching services list.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -41,7 +41,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching service details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching service details.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -59,7 +59,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating service.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating service.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -78,7 +78,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating service.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating service.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -93,7 +93,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting service.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting service.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

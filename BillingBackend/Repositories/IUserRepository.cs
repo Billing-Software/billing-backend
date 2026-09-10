@@ -15,6 +15,7 @@ namespace BillingBackend.Repositories
         Task AddRefreshTokenAsync(UserRefreshToken token);
         Task<UserRefreshToken?> GetRefreshTokenAsync(string token);
         Task RemoveRefreshTokenAsync(UserRefreshToken token);
+        Task RevokeAllRefreshTokensAsync(int userId);
         Task<PendingRegistration?> GetPendingRegistrationByEmailAsync(string email);
         Task SaveChangesAsync();
     }

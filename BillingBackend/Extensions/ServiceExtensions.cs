@@ -3,6 +3,8 @@ using BillingBackend.Repositories;
 using BillingBackend.Services;
 using BillingBackend.Services.Sms;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -10,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace BillingBackend.Extensions
@@ -109,16 +112,67 @@ namespace BillingBackend.Extensions
             return services;
         }
 
-        public static IServiceCollection AddCorsPolicy(this IServiceCollection services)
+        public static IServiceCollection AddCorsPolicy(this IServiceCollection services, IConfiguration? config = null)
         {
+            var raw = config?["Cors:AllowedOrigins"] ?? Environment.GetEnvironmentVariable("Cors__AllowedOrigins") ?? string.Empty;
+            var origins = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(o => o.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                         || o.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
             services.AddCors(options =>
             {
                 options.AddPolicy("CorsPolicy", policy =>
                 {
-                    policy.AllowAnyHeader()
-                          .AllowAnyMethod()
-                          .SetIsOriginAllowed(origin => true)
-                          .AllowCredentials();
+                    policy.WithHeaders("Authorization", "Content-Type", "X-Requested-With", "X-Correlation-Id", "X-Idempotency-Key")
+                          .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                          .SetPreflightMaxAge(TimeSpan.FromHours(1));
+                    if (origins.Length > 0)
+                    {
+                        policy.WithOrigins(origins).AllowCredentials();
+                    }
+                    else
+                    {
+                        // Fail closed. Set Cors__AllowedOrigins explicitly for every environment.
+                        policy.DisallowCredentials();
+                    }
+                });
+            });
+            return services;
+        }
+
+        public static IServiceCollection AddAppRateLimiting(this IServiceCollection services)
+        {
+            services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+                // Strict bucket for anonymous auth endpoints (login/refresh/forgot/reset/trial).
+                options.AddFixedWindowLimiter("auth", o =>
+                {
+                    o.PermitLimit = 10;
+                    o.Window = TimeSpan.FromMinutes(1);
+                    o.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+                    o.QueueLimit = 0;
+                });
+
+                // General API bucket per authenticated user / IP.
+                options.AddFixedWindowLimiter("api", o =>
+                {
+                    o.PermitLimit = 300;
+                    o.Window = TimeSpan.FromMinutes(1);
+                    o.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+                    o.QueueLimit = 0;
+                });
+
+                // Very strict bucket for OTP verification / payment verification.
+                options.AddFixedWindowLimiter("strict", o =>
+                {
+                    o.PermitLimit = 5;
+                    o.Window = TimeSpan.FromMinutes(1);
+                    o.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+                    o.QueueLimit = 0;
                 });
             });
             return services;

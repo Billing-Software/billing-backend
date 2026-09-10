@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using BillingBackend.DTOs;
 using BillingBackend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BillingBackend.Controllers
@@ -31,10 +32,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving payment settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving payment settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost("payment")]
         public async Task<ActionResult<PaymentSettingsDto>> SavePaymentSettings([FromBody] PaymentSettingsDto dto)
         {
@@ -46,10 +48,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error saving payment settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error saving payment settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("payment")]
         public Task<ActionResult<PaymentSettingsDto>> UpdatePaymentSettings([FromBody] PaymentSettingsDto dto)
         {
@@ -70,10 +73,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving tax settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving tax settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost("tax")]
         public async Task<ActionResult<TaxSettingsDto>> SaveTaxSettings([FromBody] TaxSettingsDto dto)
         {
@@ -85,10 +89,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error saving tax settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error saving tax settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("tax")]
         public Task<ActionResult<TaxSettingsDto>> UpdateTaxSettings([FromBody] TaxSettingsDto dto)
         {
@@ -109,10 +114,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving invoice settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving invoice settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost("invoice")]
         public async Task<ActionResult<InvoiceSettingsDto>> SaveInvoiceSettings([FromBody] InvoiceSettingsDto dto)
         {
@@ -124,10 +130,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error saving invoice settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error saving invoice settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("invoice")]
         public Task<ActionResult<InvoiceSettingsDto>> UpdateInvoiceSettings([FromBody] InvoiceSettingsDto dto)
         {
@@ -148,10 +155,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving invoice design.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving invoice design.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost("invoice-design")]
         public async Task<ActionResult<InvoiceDesignDto>> SaveInvoiceDesign([FromBody] InvoiceDesignDto dto)
         {
@@ -163,10 +171,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error saving invoice design.", error = ex.Message });
+                return StatusCode(500, new { message = "Error saving invoice design.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("invoice-design")]
         public Task<ActionResult<InvoiceDesignDto>> UpdateInvoiceDesign([FromBody] InvoiceDesignDto dto)
         {
@@ -187,10 +196,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving printer settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving printer settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost("printer")]
         public async Task<ActionResult<PrinterSettingsDto>> SavePrinterSettings([FromBody] PrinterSettingsDto dto)
         {
@@ -202,10 +212,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error saving printer settings.", error = ex.Message });
+                return StatusCode(500, new { message = "Error saving printer settings.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("printer")]
         public Task<ActionResult<PrinterSettingsDto>> UpdatePrinterSettings([FromBody] PrinterSettingsDto dto)
         {
@@ -226,10 +237,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving app preferences.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving app preferences.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost("preferences")]
         public async Task<ActionResult<AppPreferencesDto>> SaveAppPreferences([FromBody] AppPreferencesDto dto)
         {
@@ -241,10 +253,11 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error saving app preferences.", error = ex.Message });
+                return StatusCode(500, new { message = "Error saving app preferences.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("preferences")]
         public Task<ActionResult<AppPreferencesDto>> UpdateAppPreferences([FromBody] AppPreferencesDto dto)
         {

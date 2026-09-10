@@ -9,6 +9,14 @@ namespace BillingBackend.Data.Entities
         public int Id { get; set; }
 
         public int? BusinessId { get; set; }
+        public Business? Business { get; set; }
+
+        /// <summary>Authoritative subscription context captured when the Razorpay order is created.</summary>
+        public int? SubscriptionPlanId { get; set; }
+        public SubscriptionPlan? SubscriptionPlan { get; set; }
+
+        [MaxLength(20)]
+        public string? BillingCycle { get; set; }
 
         [MaxLength(100)]
         public string? RazorpayPaymentId { get; set; }
@@ -54,5 +62,8 @@ namespace BillingBackend.Data.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }
+
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
     }
 }

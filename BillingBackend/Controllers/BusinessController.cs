@@ -25,7 +25,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving business profile.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving business profile.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -44,7 +44,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating business profile.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating business profile.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

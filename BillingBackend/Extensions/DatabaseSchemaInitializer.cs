@@ -397,6 +397,8 @@ namespace BillingBackend.Extensions
                 // 4. Ensure Columns on PaymentTransactions table
                 AddColumnIfNotExists(context, "PaymentTransactions", "RazorpayPaymentId", "NVARCHAR(100) NULL");
                 AddColumnIfNotExists(context, "PaymentTransactions", "RazorpayOrderId", "NVARCHAR(100) NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "SubscriptionPlanId", "INT NULL");
+                AddColumnIfNotExists(context, "PaymentTransactions", "BillingCycle", "NVARCHAR(20) NULL");
                 AddColumnIfNotExists(context, "PaymentTransactions", "RazorpaySubscriptionId", "NVARCHAR(100) NULL");
                 AddColumnIfNotExists(context, "PaymentTransactions", "PaymentMethod", "NVARCHAR(50) NULL");
                 AddColumnIfNotExists(context, "PaymentTransactions", "RawWebhookPayload", "NVARCHAR(MAX) NULL");
@@ -405,10 +407,13 @@ namespace BillingBackend.Extensions
                 AddColumnIfNotExists(context, "PaymentTransactions", "WebhookEventId", "INT NULL");
                 AddColumnIfNotExists(context, "PaymentTransactions", "CorrelationId", "NVARCHAR(100) NULL");
                 AddColumnIfNotExists(context, "PaymentTransactions", "UpdatedAt", "DATETIME2 NULL");
+                ExecuteRawSqlDirect(context, @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_PaymentTransactions_RazorpayOrderId' AND object_id = OBJECT_ID('PaymentTransactions')) CREATE UNIQUE INDEX [UX_PaymentTransactions_RazorpayOrderId] ON [PaymentTransactions]([RazorpayOrderId]) WHERE RazorpayOrderId IS NOT NULL;");
+                ExecuteRawSqlDirect(context, @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_PaymentTransactions_RazorpayPaymentId' AND object_id = OBJECT_ID('PaymentTransactions')) CREATE UNIQUE INDEX [UX_PaymentTransactions_RazorpayPaymentId] ON [PaymentTransactions]([RazorpayPaymentId]) WHERE RazorpayPaymentId IS NOT NULL;");
 
                 // 5. Ensure Columns on PendingRegistrations table
                 AddColumnIfNotExists(context, "PendingRegistrations", "RazorpayCustomerId", "NVARCHAR(100) NULL");
                 AddColumnIfNotExists(context, "PendingRegistrations", "RazorpaySubscriptionId", "NVARCHAR(100) NULL");
+                AddColumnIfNotExists(context, "PendingRegistrations", "RazorpayOrderId", "NVARCHAR(100) NULL");
                 AddColumnIfNotExists(context, "PendingRegistrations", "ReminderEmailSent", "BIT DEFAULT 0 NOT NULL");
                 AddColumnIfNotExists(context, "PendingRegistrations", "ReminderEmailSentAt", "DATETIME2 NULL");
                 AddColumnIfNotExists(context, "PendingRegistrations", "SelectedPlanId", "INT DEFAULT 1 NOT NULL");
@@ -484,6 +489,32 @@ namespace BillingBackend.Extensions
                 AddColumnIfNotExists(context, "Businesses", "IsTrial", "BIT DEFAULT 1 NOT NULL");
                 AddColumnIfNotExists(context, "Businesses", "TrialStartsAt", "DATETIME2 NULL");
                 AddColumnIfNotExists(context, "Businesses", "TrialEndsAt", "DATETIME2 NULL");
+
+                // Industrial auth hardening columns on Users table (lockout + OTP attempt guards)
+                AddColumnIfNotExists(context, "Users", "FailedLoginAttempts", "INT DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "Users", "LockoutEnd", "DATETIME2 NULL");
+                AddColumnIfNotExists(context, "Users", "PasswordResetAttemptCount", "INT DEFAULT 0 NOT NULL");
+                AddColumnIfNotExists(context, "Users", "PasswordResetRequestedAt", "DATETIME2 NULL");
+
+                // 16. RowVersion columns for EF optimistic concurrency (model marks them [Timestamp]).
+                // Fresh databases get them from EnsureCreated; existing databases are upgraded here.
+                // rowversion is auto-populated by SQL Server, so ADD is safe on populated tables.
+                AddColumnIfNotExists(context, "Businesses", "RowVersion", "rowversion");
+                AddColumnIfNotExists(context, "Bills", "RowVersion", "rowversion");
+                AddColumnIfNotExists(context, "InventoryItems", "RowVersion", "rowversion");
+                AddColumnIfNotExists(context, "CustomerLedgers", "RowVersion", "rowversion");
+                AddColumnIfNotExists(context, "StockTransfers", "RowVersion", "rowversion");
+                AddColumnIfNotExists(context, "PaymentTransactions", "RowVersion", "rowversion");
+
+                // 17. Operational tenant/reporting indexes (online-safe, mirrors 004_IndustrialHardening).
+                // Foreign keys and CHECK constraints stay pipeline-only (004): they lock tables and
+                // require the fail-closed data validation that must run before enforcement.
+                CreateCompositeIndexIfNotExists(context, "Bills", "IX_Bills_BusinessId_CreatedAt", "[BusinessId], [CreatedAt] DESC");
+                CreateCompositeIndexIfNotExists(context, "PaymentTransactions", "IX_PaymentTransactions_BusinessId_CreatedAt", "[BusinessId], [CreatedAt] DESC");
+                CreateCompositeIndexIfNotExists(context, "CustomerLedgers", "IX_CustomerLedgers_BusinessId_CustomerId_TransactionDate", "[BusinessId], [CustomerId], [TransactionDate] DESC");
+                CreateCompositeIndexIfNotExists(context, "InventoryItems", "IX_InventoryItems_BusinessId_CurrentStock", "[BusinessId], [CurrentStock]");
+                CreateCompositeIndexIfNotExists(context, "AuditLogs", "IX_AuditLogs_BusinessId_CreatedAt", "[BusinessId], [CreatedAt] DESC");
+                CreateCompositeIndexIfNotExists(context, "WebhookEventLogs", "IX_WebhookEventLogs_Completed_ProcessedAt", "[ProcessingStatus], [ProcessedAt]");
 
                 // Initialize trial tracking for existing Businesses if not set
                 ExecuteRawSqlDirect(context, """
@@ -712,6 +743,22 @@ namespace BillingBackend.Extensions
                 context.Database.ExecuteSqlRaw(sql);
             }
             catch { /* ignore */ }
+        }
+
+        private static void CreateIndexIfNotExists(BillingDbContext context, string tableName, string indexName, string columnName, bool unique, string? filter = null)
+        {
+            var uniqueKeyword = unique ? "UNIQUE " : string.Empty;
+            var filterClause = string.IsNullOrWhiteSpace(filter) ? string.Empty : $" WHERE {filter}";
+            var sql = $@"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = '{indexName}' AND object_id = OBJECT_ID('{tableName}'))
+                         CREATE {uniqueKeyword}INDEX [{indexName}] ON [{tableName}]([{columnName}]){filterClause};";
+            try { context.Database.ExecuteSqlRaw(sql); } catch { /* schema verification is best effort */ }
+        }
+
+        private static void CreateCompositeIndexIfNotExists(BillingDbContext context, string tableName, string indexName, string columnsSql)
+        {
+            var sql = $@"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = '{indexName}' AND object_id = OBJECT_ID('{tableName}'))
+                         CREATE INDEX [{indexName}] ON [{tableName}]({columnsSql});";
+            try { context.Database.ExecuteSqlRaw(sql); } catch { /* schema verification is best effort */ }
         }
 
         private static void ExecuteRawSqlDirect(BillingDbContext context, string sql)

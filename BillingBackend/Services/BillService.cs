@@ -13,6 +13,9 @@ namespace BillingBackend.Services
     public class BillService : IBillService
     {
         private readonly IBillRepository _billRepository;
+        private readonly IBranchRepository _branchRepository;
+        private readonly ICustomerRepository _customerRepository;
+        private readonly IStaffRepository _staffRepository;
         private readonly IAuditService _auditService;
         private readonly ISettingsService _settingsService;
         private readonly ILogger<BillService> _logger;
@@ -30,11 +33,17 @@ namespace BillingBackend.Services
 
         public BillService(
             IBillRepository billRepository,
+            IBranchRepository branchRepository,
+            ICustomerRepository customerRepository,
+            IStaffRepository staffRepository,
             IAuditService auditService,
             ISettingsService settingsService,
             ILogger<BillService> logger)
         {
             _billRepository = billRepository;
+            _branchRepository = branchRepository;
+            _customerRepository = customerRepository;
+            _staffRepository = staffRepository;
             _auditService = auditService;
             _settingsService = settingsService;
             _logger = logger;
@@ -82,23 +91,80 @@ namespace BillingBackend.Services
         {
             try
             {
+                if (businessId <= 0)
+                    throw new InvalidOperationException("Invalid business scope.");
+                if (dto.Items == null || dto.Items.Count == 0)
+                    throw new InvalidOperationException("At least one bill item is required.");
+                if (dto.Items.Count > 200)
+                    throw new InvalidOperationException("Too many bill items.");
+
+                // IDOR guards: every referenced entity must belong to this business.
+                var branch = await _branchRepository.GetByIdAsync(businessId, dto.BranchId);
+                if (branch == null)
+                    throw new InvalidOperationException("Selected branch does not belong to this business.");
+                var customer = await _customerRepository.GetByIdAsync(businessId, dto.CustomerId);
+                if (customer == null)
+                    throw new InvalidOperationException("Selected customer does not belong to this business.");
+                int? staffId = null;
+                if (dto.CreatedByStaffId.HasValue)
+                {
+                    var staff = await _staffRepository.GetByIdAsync(businessId, dto.CreatedByStaffId.Value);
+                    if (staff == null)
+                        throw new InvalidOperationException("Selected staff does not belong to this business.");
+                    staffId = staff.Id;
+                }
+
+                // Server-side totals: never trust client Subtotal/Discount/Tax/Total.
+                decimal subtotal = 0;
+                foreach (var it in dto.Items)
+                {
+                    if (it.Quantity <= 0 || it.Quantity > 10000)
+                        throw new InvalidOperationException("Invalid item quantity.");
+                    if (it.UnitPrice < 0 || it.UnitPrice > 10_000_000)
+                        throw new InvalidOperationException("Invalid item price.");
+                    if (string.IsNullOrWhiteSpace(it.ServiceName))
+                        throw new InvalidOperationException("Item name is required.");
+                    subtotal += Math.Round(it.UnitPrice * it.Quantity, 2, MidpointRounding.AwayFromZero);
+                }
+                subtotal = Math.Round(subtotal, 2, MidpointRounding.AwayFromZero);
+                var discount = Math.Round(dto.DiscountAmount, 2, MidpointRounding.AwayFromZero);
+                var tax = Math.Round(dto.TaxAmount, 2, MidpointRounding.AwayFromZero);
+                if (discount < 0 || discount > subtotal)
+                    throw new InvalidOperationException("Invalid discount amount.");
+                if (tax < 0 || tax > subtotal * 2)
+                    throw new InvalidOperationException("Invalid tax amount.");
+                var total = Math.Round(subtotal - discount + tax, 2, MidpointRounding.AwayFromZero);
+                if (total < 0)
+                    throw new InvalidOperationException("Invalid bill total.");
+
+                var allowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    { "Cash", "UPI", "Card", "NetBanking", "Wallet", "Razorpay" };
+                var paymentMethod = string.IsNullOrWhiteSpace(dto.PaymentMethod) ? "Cash" : dto.PaymentMethod.Trim();
+                if (!allowedMethods.Contains(paymentMethod))
+                    throw new InvalidOperationException("Invalid payment method.");
+                var allowedStatus = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    { "Pending", "Paid", "Failed", "Cancelled" };
+                var status = string.IsNullOrWhiteSpace(dto.Status) ? "Pending" : dto.Status.Trim();
+                if (!allowedStatus.Contains(status))
+                    throw new InvalidOperationException("Invalid bill status.");
+
                 var bill = new Bill
                 {
                     BusinessId = businessId,
-                    BranchId = dto.BranchId,
-                    CustomerId = dto.CustomerId,
-                    CreatedByStaffId = dto.CreatedByStaffId,
-                    BillNumber = dto.BillNumber,
-                    Subtotal = dto.Subtotal,
-                    DiscountCode = dto.DiscountCode,
-                    DiscountAmount = dto.DiscountAmount,
-                    TaxAmount = dto.TaxAmount,
-                    TotalAmount = dto.TotalAmount,
-                    PaymentMethod = dto.PaymentMethod,
-                    Status = dto.Status,
-                    IdempotencyKey = dto.IdempotencyKey,
-                    PaymentReference = dto.PaymentReference,
-                    Notes = dto.Notes
+                    BranchId = branch.Id,
+                    CustomerId = customer.Id,
+                    CreatedByStaffId = staffId,
+                    BillNumber = dto.BillNumber.Trim(),
+                    Subtotal = subtotal,
+                    DiscountCode = string.IsNullOrWhiteSpace(dto.DiscountCode) ? null : dto.DiscountCode.Trim(),
+                    DiscountAmount = discount,
+                    TaxAmount = tax,
+                    TotalAmount = total,
+                    PaymentMethod = paymentMethod,
+                    Status = status,
+                    IdempotencyKey = string.IsNullOrWhiteSpace(dto.IdempotencyKey) ? null : dto.IdempotencyKey.Trim(),
+                    PaymentReference = string.IsNullOrWhiteSpace(dto.PaymentReference) ? null : dto.PaymentReference.Trim(),
+                    Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim()
                 };
 
                 // Serialize items list to JSON for stored procedure OPENJSON parsing

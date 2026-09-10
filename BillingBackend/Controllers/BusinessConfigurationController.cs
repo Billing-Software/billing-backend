@@ -41,7 +41,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving business configuration.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving business configuration.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -58,7 +58,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating business configuration.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating business configuration.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

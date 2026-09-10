@@ -104,6 +104,10 @@ namespace BillingBackend.Data.Entities
         // Navigation properties
         [ForeignKey(nameof(OwnerId))]
         public User Owner { get; set; } = null!;
+        public SubscriptionPlan ActivePlan { get; set; } = null!;
+
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
         public ICollection<Branch> Branches { get; set; } = new List<Branch>();
         public ICollection<Customer> Customers { get; set; } = new List<Customer>();

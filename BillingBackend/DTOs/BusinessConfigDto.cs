@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using BillingBackend.Validation;
 
 namespace BillingBackend.DTOs
 {
@@ -42,10 +44,16 @@ namespace BillingBackend.DTOs
 
     public class UpdateBusinessConfigDto
     {
+        [StringLength(100)]
         public string? BusinessType { get; set; }
+        [StringLength(50)]
         public string? SellingModel { get; set; }
+        [StringLength(50)]
         public string? GstScheme { get; set; }
+        [StringLength(15)]
+        [RegularExpression(ValidationPatterns.Gstin, ErrorMessage = "GstIn must be a valid 15-character GSTIN.")]
         public string? GstIn { get; set; }
+        [StringLength(100)]
         public string? RegisteredState { get; set; }
         public Dictionary<string, bool>? Features { get; set; }
         public Dictionary<string, TerminologyPairDto>? Terminology { get; set; }
@@ -69,19 +77,32 @@ namespace BillingBackend.DTOs
 
     public class TaxCalculationRequestDto
     {
+        [Required]
+        [StringLength(100)]
         public string SupplierState { get; set; } = "Andhra Pradesh";
+        [Required]
+        [StringLength(100)]
         public string CustomerState { get; set; } = "Andhra Pradesh";
+        [Required]
+        [MinLength(1, ErrorMessage = "At least one item is required.")]
         public List<TaxLineItemRequestDto> Items { get; set; } = new();
     }
 
     public class TaxLineItemRequestDto
     {
+        [Range(1, int.MaxValue, ErrorMessage = "ServiceOrInventoryId must be positive.")]
         public int ServiceOrInventoryId { get; set; }
+        [Required]
+        [StringLength(20)]
         public string ItemType { get; set; } = "Inventory"; // Inventory or Service
+        [Range(0, 100000000, ErrorMessage = "UnitPrice must be non-negative.")]
         public decimal UnitPrice { get; set; }
+        [Range(1, 100000, ErrorMessage = "Quantity must be at least 1.")]
         public int Quantity { get; set; }
+        [Range(0, 100000000, ErrorMessage = "DiscountAmount must be non-negative.")]
         public decimal DiscountAmount { get; set; }
         public int? TaxCategoryId { get; set; }
+        [StringLength(20)]
         public string? CustomHSNSAC { get; set; }
     }
 

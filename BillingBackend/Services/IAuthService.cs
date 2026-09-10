@@ -13,5 +13,6 @@ namespace BillingBackend.Services
         Task<bool> ResetPasswordAsync(string email, string token, string newPassword);
         Task<bool> ChangePasswordAsync(int userId, string currentPassword, string newPassword);
         Task<AuthResponseDto?> RefreshTokenAsync(TokenRefreshDto refreshDto);
+        Task<bool> LogoutAsync(string refreshToken);
     }
 }

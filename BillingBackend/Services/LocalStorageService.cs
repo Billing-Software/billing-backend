@@ -22,22 +22,29 @@ namespace BillingBackend.Services
 
         public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType)
         {
-            _logger.LogInformation("LocalStorage Upload Started: FileName={FileName}, ContentType={ContentType}, Size={Size} bytes", 
-                fileName, contentType, fileStream.Length);
+            // Strict filename allowlist (GUID.webp only) — prevents path traversal even if caller changes.
+            if (string.IsNullOrWhiteSpace(fileName) || fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+                fileName.Contains('/') || fileName.Contains('\\') || !fileName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Invalid file name.");
+
+            _logger.LogInformation("LocalStorage Upload Started: Size={Size} bytes", fileStream.Length);
 
             try
             {
                 var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads");
-                _logger.LogInformation("Ensuring local directory exists: {Path}", uploadsFolder);
                 if (!Directory.Exists(uploadsFolder))
                 {
                     Directory.CreateDirectory(uploadsFolder);
                 }
 
-                var filePath = Path.Combine(uploadsFolder, fileName);
-                _logger.LogInformation("Saving file to local path: {FilePath}", filePath);
-                
-                using (var destinationStream = new FileStream(filePath, FileMode.Create))
+                var filePath = Path.Combine(uploadsFolder, Path.GetFileName(fileName));
+                // Ensure resolved path stays inside uploads folder (traversal guard).
+                var fullUploads = Path.GetFullPath(uploadsFolder);
+                var fullPath = Path.GetFullPath(filePath);
+                if (!fullPath.StartsWith(fullUploads, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Invalid file path.");
+
+                using (var destinationStream = new FileStream(fullPath, FileMode.Create))
                 {
                     await fileStream.CopyToAsync(destinationStream);
                 }
@@ -47,13 +54,10 @@ namespace BillingBackend.Services
                 var request = _httpContextAccessor.HttpContext?.Request;
                 if (request == null)
                 {
-                    var fallbackUrl = $"/uploads/{fileName}";
-                    _logger.LogWarning("HttpContext request is null. Returning relative fallback URL: {Url}", fallbackUrl);
-                    return fallbackUrl;
+                    return $"/uploads/{fileName}";
                 }
 
                 var fileUrl = $"{request.Scheme}://{request.Host}/uploads/{fileName}";
-                _logger.LogInformation("Generated LocalStorage file URL: {Url}", fileUrl);
                 return fileUrl;
             }
             catch (Exception ex)

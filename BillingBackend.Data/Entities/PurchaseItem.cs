@@ -30,5 +30,8 @@ namespace BillingBackend.Data.Entities
 
         [ForeignKey(nameof(PurchaseId))]
         public Purchase Purchase { get; set; } = null!;
+
+        [ForeignKey(nameof(InventoryItemId))]
+        public InventoryItem? InventoryItem { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel.DataAnnotations;
+using BillingBackend.Validation;
 
 namespace BillingBackend.DTOs
 {
@@ -14,9 +15,11 @@ namespace BillingBackend.DTOs
         public string? AccountHolderName { get; set; }
 
         [StringLength(50)]
+        [RegularExpression(@"^[0-9]{9,18}$", ErrorMessage = "AccountNumber must be 9-18 digits.")]
         public string? AccountNumber { get; set; }
 
         [StringLength(20)]
+        [RegularExpression(ValidationPatterns.Ifsc, ErrorMessage = "IfscCode must be valid (e.g. HDFC0001234).")]
         public string? IfscCode { get; set; }
 
         [StringLength(100)]
@@ -26,6 +29,7 @@ namespace BillingBackend.DTOs
         /// Merchant UPI ID / VPA for dynamic QR code generation
         /// </summary>
         [StringLength(100)]
+        [RegularExpression(ValidationPatterns.UpiVpa, ErrorMessage = "UpiVpa must be a valid VPA (e.g. shop@upi).")]
         public string? UpiVpa { get; set; }
 
         public bool ShowUpiQrOnInvoice { get; set; } = true;

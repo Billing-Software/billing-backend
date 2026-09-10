@@ -1,5 +1,6 @@
 using BillingBackend.DTOs;
 using BillingBackend.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ namespace BillingBackend.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<BranchDto>>> GetAll()
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var branches = await _branchService.GetByBusinessIdAsync(CurrentBusinessId);
@@ -25,13 +27,14 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching branches.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching branches.", correlationId = CorrelationId });
             }
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<BranchDto>> GetById(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var branch = await _branchService.GetByIdAsync(CurrentBusinessId, id);
@@ -40,13 +43,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching branch details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching branch details.", correlationId = CorrelationId });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPost]
         public async Task<ActionResult<BranchDto>> Create(BranchDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 var created = await _branchService.AddAsync(CurrentBusinessId, dto);
@@ -62,13 +68,16 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating branch.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating branch.", correlationId = CorrelationId });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpPut("{id}")]
         public async Task<ActionResult<BranchDto>> Update(int id, BranchDto dto)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
                 dto.Id = id;
@@ -77,13 +86,15 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating branch.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating branch.", correlationId = CorrelationId });
             }
         }
 
+        [Authorize(Roles = "Owner,SuperAdmin")]
         [HttpDelete("{id}")]
         public async Task<ActionResult> Delete(int id)
         {
+            if (!HasValidBusinessScope(out _)) return InvalidScope();
             try
             {
                 var deleted = await _branchService.DeleteAsync(CurrentBusinessId, id);
@@ -92,7 +103,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting branch.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting branch.", correlationId = CorrelationId });
             }
         }
     }

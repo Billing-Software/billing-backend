@@ -5,11 +5,20 @@ services:
     restart: unless-stopped
     ports:
       - "5000:8080"
+    # All secrets MUST come from environment / Docker secrets / Key Vault.
+    # Copy .env.example to .env locally (never commit .env). In production inject via vault.
+    env_file:
+      - .env
     environment:
-      - ConnectionStrings__DefaultConnection=User Id=billcom_user;Password=U_48sFFH_q6p;Data Source=bmc4e2rk3r80p8b7_high;Tns_Admin=/app/wallet;
-      - CloudflareR2__AccountId=b48b57a8b26533db5db9ddb625c944b0
-      - CloudflareR2__AccessKey=4746b144b49e49b009089d5a7ecd65d9
-      - CloudflareR2__SecretKey=cb62da981ba3d8a718ec2523acbe2efbae9a4d2fc182ab1b648f24ae5a7f02e3
-      - CloudflareR2__BucketName=billcom
-      - CloudflareR2__PublicUrl=https://pub-a9ac020ef89545ba89aa0c86f8ff8308.r2.dev
-
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      # Required (no defaults — container fails fast if missing):
+      # - ConnectionStrings__DefaultConnection=${ConnectionStrings__DefaultConnection}
+      # - Jwt__Key=${Jwt__Key}
+      # - Security__TokenEncryptionKey=${Security__TokenEncryptionKey}
+      # - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      # - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      # - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+    # Oracle wallet is mounted read-only at runtime, never baked into the image:
+    # volumes:
+    #   - ./wallet:/app/wallet:ro

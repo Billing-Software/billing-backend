@@ -211,12 +211,7 @@ namespace BillingBackend.Services.Sms
                 ? templateId
                 : settings.InvoiceTemplateId;
 
-            _logger.LogInformation("==================================================");
-            _logger.LogInformation("[ExotelSmsService] Dispatching SMS via Exotel");
-            _logger.LogInformation("BusinessId: {BusinessId} | From: {From} | To: {To} | DLT Entity: {Entity} | DLT Template: {Template}",
-                businessId, settings.SenderId, formattedPhone, settings.DltEntityId, effectiveTemplateId);
-            _logger.LogInformation("Message Body: {Message}", message);
-            _logger.LogInformation("==================================================");
+            _logger.LogInformation("[ExotelSmsService] Dispatching SMS. BusinessId: {BusinessId}", businessId);
 
             // Check if global Exotel credentials are mock/placeholder in dev environment
             if (string.IsNullOrEmpty(_apiKey) ||

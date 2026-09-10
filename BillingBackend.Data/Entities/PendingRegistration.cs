@@ -51,6 +51,9 @@ namespace BillingBackend.Data.Entities
         [MaxLength(100)]
         public string? RazorpaySubscriptionId { get; set; }
 
+        [MaxLength(100)]
+        public string? RazorpayOrderId { get; set; }
+
         [Required]
         [MaxLength(50)]
         public string Status { get; set; } = "PendingPayment"; // PendingPayment, Failed, Completed, Expired

@@ -129,7 +129,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching dashboard statistics.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching dashboard statistics.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -189,7 +189,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching payment statistics.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching payment statistics.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -232,7 +232,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error retrieving clients list.", error = ex.Message });
+                return StatusCode(500, new { message = "Error retrieving clients list.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -254,18 +254,19 @@ namespace BillingBackend.Controllers
                 using var transaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    using var hmac = new HMACSHA512();
-                    var passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(registerDto.Password));
-                    var passwordSalt = hmac.Key;
+                    var (pwOk, pwError) = BillingBackend.Security.PasswordPolicy.Validate(registerDto.Password);
+                    if (!pwOk)
+                        return BadRequest(pwError ?? "Password does not meet policy.");
+                    BillingBackend.Security.PasswordHasher.CreateHash(registerDto.Password, out var passwordHash, out var passwordSalt);
 
-                    // 1. Insert User
+                    // 1. Insert User (SuperAdmin-created clients are always Owner; never trust client Role/PlanId)
                     var user = new User
                     {
                         Username = registerDto.Username,
                         Email = registerDto.Email,
                         PasswordHash = passwordHash,
                         PasswordSalt = passwordSalt,
-                        Role = string.IsNullOrEmpty(registerDto.Role) ? "Owner" : registerDto.Role
+                        Role = "Owner"
                     };
                     await _context.Users.AddAsync(user);
                     await _context.SaveChangesAsync();
@@ -341,12 +342,12 @@ namespace BillingBackend.Controllers
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
-                    return BadRequest($"Failed to create client: {ex.Message}");
+                    return BadRequest(new { message = "Failed to create client. Please check input and try again." });
                 }
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Unexpected error creating client.", error = ex.Message });
+                return StatusCode(500, new { message = "Unexpected error creating client.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -378,7 +379,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating client details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating client details.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -398,7 +399,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error toggling client suspension status.", error = ex.Message });
+                return StatusCode(500, new { message = "Error toggling client suspension status.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -446,7 +447,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting client record.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting client record.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

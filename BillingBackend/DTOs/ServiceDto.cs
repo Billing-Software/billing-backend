@@ -19,7 +19,9 @@ namespace BillingBackend.DTOs
         [StringLength(100)]
         public string Category { get; set; } = string.Empty;
 
+        [Range(0, 100000000, ErrorMessage = "BasePrice must be non-negative.")]
         public decimal BasePrice { get; set; }
+        [Range(0, 28, ErrorMessage = "TaxRate must be between 0 and 28.")]
         public decimal TaxRate { get; set; }
 
         [StringLength(20)]

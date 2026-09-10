@@ -25,7 +25,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching customers.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching customers.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -40,7 +40,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching customer details.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching customer details.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -54,7 +54,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating customer.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating customer.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -69,7 +69,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error updating customer.", error = ex.Message });
+                return StatusCode(500, new { message = "Error updating customer.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -84,7 +84,7 @@ namespace BillingBackend.Controllers
             }
             catch (System.Exception ex)
             {
-                return StatusCode(500, new { message = "Error deleting customer.", error = ex.Message });
+                return StatusCode(500, new { message = "Error deleting customer.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }

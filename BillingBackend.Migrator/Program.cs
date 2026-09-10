@@ -1,25 +1,67 @@
 using System;
-using System.IO;
 using System.Linq;
 using BillingBackend.Data;
 using BillingBackend.Data.Entities;
+using BillingBackend.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace BillingBackend.Migrator
 {
+    /// <summary>
+    /// Development-only database reset.
+    ///
+    /// The Entity Framework model (<see cref="BillingDbContext"/>) is the single source of
+    /// truth: reset creates the schema with EnsureCreated (which includes the composite
+    /// tenant keys, CHECK constraints and indexes declared in OnModelCreating) and then
+    /// runs <see cref="DatabaseSchemaInitializer"/> (additive columns, feature seeds).
+    /// Reference data below mirrors the HasData seeds in BillingDbContext.
+    ///
+    /// Production must use the versioned scripts in BillingBackend.Database/Migrations
+    /// through the release pipeline - never this reset workflow.
+    /// </summary>
     class Program
     {
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             Console.WriteLine("==================================================");
             Console.WriteLine("BillCom Local SQL Server DB Fresh Setup & Purge");
-            Console.WriteLine("Target: SQL Server (Integrated Security) @ localhost");
+            Console.WriteLine("Target: SQL Server @ localhost (development only)");
             Console.WriteLine("==================================================");
 
-            var connectionString = "Data Source=.;Initial Catalog=SmartBillingDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;";
+            if (args.Contains("--print-ddl"))
+            {
+                var ddlConnectionString = GetArgValue(args, "--connection")
+                    ?? Environment.GetEnvironmentVariable("MIGRATOR_CONNECTION")
+                    ?? "Data Source=.;Initial Catalog=SmartBillingDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;";
+
+                var ddlServices = new ServiceCollection();
+                ddlServices.AddLogging();
+                ddlServices.AddDbContext<BillingDbContext>(options =>
+                    options.UseSqlServer(ddlConnectionString));
+
+                // Drift-detection aid: prints the DDL implied by the EF model without
+                // touching the database. Throws here on mapping misconfiguration.
+                using var ddlProvider = ddlServices.BuildServiceProvider();
+                using var ddlScope = ddlProvider.CreateScope();
+                var ddlContext = ddlScope.ServiceProvider.GetRequiredService<BillingDbContext>();
+                Console.WriteLine(ddlContext.Database.GenerateCreateScript());
+                return 0;
+            }
+
+            if (!args.Contains("--reset-database"))
+            {
+                Console.Error.WriteLine("Refusing destructive reset. Use versioned SQL files in BillingBackend.Database/Migrations for deployments. --reset-database is development-only.");
+                return 2;
+            }
+
+            var connectionString = GetArgValue(args, "--connection")
+                ?? Environment.GetEnvironmentVariable("MIGRATOR_CONNECTION")
+                ?? "Data Source=.;Initial Catalog=SmartBillingDb;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;";
 
             var services = new ServiceCollection();
+            services.AddLogging();
             services.AddDbContext<BillingDbContext>(options =>
                 options.UseSqlServer(connectionString));
 
@@ -32,10 +74,9 @@ namespace BillingBackend.Migrator
                 var context = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
                 try
                 {
-                    // Ensure database exists
                     context.Database.EnsureCreated();
 
-                    Console.WriteLine("\n[1/3] Purging all SQL Server tables, views, and constraints...");
+                    Console.WriteLine("\n[1/4] Purging all SQL Server tables, views, and constraints...");
                     context.Database.ExecuteSqlRaw(@"
                         -- Drop all foreign key constraints first
                         DECLARE @sql NVARCHAR(MAX) = N'';
@@ -69,499 +110,47 @@ namespace BillingBackend.Migrator
                         INNER JOIN sys.schemas s ON sq.schema_id = s.schema_id
                         WHERE s.name = 'dbo';
                         EXEC sp_executesql @sql;");
-                    Console.WriteLine("✓ Purged all SQL Server tables, views, sequences, and constraints cleanly.");
+                    Console.WriteLine("Purged all SQL Server tables, views, sequences, and constraints cleanly.");
 
                     if (dropOnly)
                     {
                         Console.WriteLine("\n==================================================");
                         Console.WriteLine("SUCCESS: All SQL Server database tables completely purged!");
                         Console.WriteLine("==================================================");
-                        return;
+                        return 0;
                     }
 
-                    Console.WriteLine("\n[2/3] Creating 26 fresh SQL Server Database schema tables...");
-                    string[] createTableSqls = new[]
-                    {
-                        @"CREATE TABLE [Users] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Username] NVARCHAR(100) NOT NULL UNIQUE,
-                            [Email] NVARCHAR(256) NOT NULL UNIQUE,
-                            [PasswordHash] VARBINARY(MAX) NOT NULL,
-                            [PasswordSalt] VARBINARY(MAX) NOT NULL,
-                            [Role] NVARCHAR(50) DEFAULT 'Owner' NOT NULL,
-                            [PasswordResetToken] NVARCHAR(100),
-                            [PasswordResetTokenExpiry] DATETIME2,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
+                    Console.WriteLine("\n[2/4] Creating schema from the Entity Framework model...");
+                    context.Database.EnsureCreated();
+                    Console.WriteLine("Schema created from the EF model (tenant keys, checks, indexes included).");
 
-                        @"CREATE TABLE [SubscriptionPlans] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Name] NVARCHAR(100) NOT NULL,
-                            [RazorpayPlanIdMonthly] NVARCHAR(100) NOT NULL,
-                            [RazorpayPlanIdYearly] NVARCHAR(100) NOT NULL,
-                            [MonthlyPrice] DECIMAL(18,2) NOT NULL,
-                            [YearlyPrice] DECIMAL(18,2) NOT NULL,
-                            [MaxBranches] INT NOT NULL,
-                            [MaxStaff] INT NOT NULL,
-                            [IsActive] BIT DEFAULT 1 NOT NULL
-                        )",
+                    Console.WriteLine("\n[3/4] Running additive schema verification and feature seeds...");
+                    DatabaseSchemaInitializer.EnsureDatabaseSchemaUpdated(serviceProvider);
+                    Console.WriteLine("Schema verification completed.");
 
-                        @"CREATE TABLE [Businesses] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [OwnerId] INT NOT NULL UNIQUE REFERENCES [Users]([Id]) ON DELETE CASCADE,
-                            [LegalName] NVARCHAR(200) NOT NULL,
-                            [TradingName] NVARCHAR(200),
-                            [LogoUrl] NVARCHAR(500),
-                            [Address] NVARCHAR(500),
-                            [City] NVARCHAR(100),
-                            [State] NVARCHAR(100),
-                            [PostalCode] NVARCHAR(20),
-                            [Country] NVARCHAR(100) DEFAULT 'India' NOT NULL,
-                            [Phone] NVARCHAR(20),
-                            [Email] NVARCHAR(256),
-                            [Website] NVARCHAR(500),
-                            [GstIn] NVARCHAR(50),
-                            [BusinessType] NVARCHAR(100) DEFAULT 'General Retail Store' NOT NULL,
-                            [SellingModel] NVARCHAR(50) DEFAULT 'GOODS_AND_SERVICES' NOT NULL,
-                            [GstScheme] NVARCHAR(50) DEFAULT 'Regular' NOT NULL,
-                            [RegisteredState] NVARCHAR(100),
-                            [CustomTerminologyJson] NVARCHAR(MAX),
-                            [DefaultTaxRate] DECIMAL(5,2) DEFAULT 18.00 NOT NULL,
-                            [PricesIncludeTax] BIT DEFAULT 1 NOT NULL,
-                            [ReceiptHeader] NVARCHAR(500),
-                            [ReceiptFooter] NVARCHAR(500),
-                            [ShowLogoOnReceipt] BIT DEFAULT 1 NOT NULL,
-                            [ReceiptTemplateType] NVARCHAR(50) DEFAULT 'Thermal80mm' NOT NULL,
-                            [IsSuspended] BIT DEFAULT 0 NOT NULL,
-                            [ActivePlanId] INT DEFAULT 1 NOT NULL REFERENCES [SubscriptionPlans]([Id]) ON DELETE SET NULL,
-                            [AllowedBranches] INT DEFAULT 1 NOT NULL,
-                            [AllowedStaff] INT DEFAULT 2 NOT NULL,
-                            [RazorpayCustomerId] NVARCHAR(100),
-                            [RazorpaySubscriptionId] NVARCHAR(100),
-                            [SubscriptionStatus] NVARCHAR(50) DEFAULT 'Inactive' NOT NULL,
-                            [SubscriptionExpiresAt] DATETIME2,
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
+                    Console.WriteLine("\n[4/4] Seeding reference data (plans, tax, HSN/SAC, business types)...");
+                    SeedReferenceData(context);
+                    Console.WriteLine("Reference data seeded successfully.");
 
-                        @"CREATE TABLE [Branches] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [Name] NVARCHAR(100) NOT NULL,
-                            [Address] NVARCHAR(500),
-                            [City] NVARCHAR(100),
-                            [PostalCode] NVARCHAR(20),
-                            [Phone] NVARCHAR(20),
-                            [IsActive] BIT DEFAULT 1 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [Categories] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [ParentId] INT REFERENCES [Categories]([Id]),
-                            [Name] NVARCHAR(100) NOT NULL,
-                            [Type] NVARCHAR(50) DEFAULT 'Service' NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [Customers] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [Name] NVARCHAR(200) NOT NULL,
-                            [Phone] NVARCHAR(20),
-                            [Email] NVARCHAR(256),
-                            [GstIn] NVARCHAR(50),
-                            [IsWalkIn] BIT DEFAULT 0 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [Services] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [Name] NVARCHAR(200) NOT NULL,
-                            [SKU] NVARCHAR(50) NOT NULL,
-                            [Category] NVARCHAR(100) NOT NULL,
-                            [BasePrice] DECIMAL(18,2) NOT NULL,
-                            [TaxRate] DECIMAL(5,2) DEFAULT 0 NOT NULL,
-                            [Status] NVARCHAR(20) DEFAULT 'Active' NOT NULL,
-                            [ImageUrl] NVARCHAR(500),
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [InventoryItems] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [Name] NVARCHAR(200) NOT NULL,
-                            [SKU] NVARCHAR(50) NOT NULL,
-                            [Category] NVARCHAR(100) NOT NULL,
-                            [CurrentStock] INT DEFAULT 0 NOT NULL,
-                            [Unit] NVARCHAR(50) DEFAULT 'pcs' NOT NULL,
-                            [ReorderLevel] INT DEFAULT 5 NOT NULL,
-                            [ImageUrl] NVARCHAR(500),
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [StaffMembers] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [UserId] INT REFERENCES [Users]([Id]),
-                            [BranchId] INT REFERENCES [Branches]([Id]),
-                            [Name] NVARCHAR(200) NOT NULL,
-                            [EmpCode] NVARCHAR(50) NOT NULL,
-                            [Contact] NVARCHAR(256),
-                            [Role] NVARCHAR(50) DEFAULT 'Staff' NOT NULL,
-                            [TotalBills] INT DEFAULT 0 NOT NULL,
-                            [RevenueGenerated] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [Status] NVARCHAR(20) DEFAULT 'Active' NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [Bills] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]),
-                            [BranchId] INT NOT NULL REFERENCES [Branches]([Id]),
-                            [CustomerId] INT NOT NULL REFERENCES [Customers]([Id]),
-                            [CreatedByStaffId] INT REFERENCES [StaffMembers]([Id]) ON DELETE SET NULL,
-                            [BillNumber] NVARCHAR(50) NOT NULL,
-                            [Subtotal] DECIMAL(18,2) NOT NULL,
-                            [DiscountCode] NVARCHAR(50),
-                            [DiscountAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [TaxAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [TotalAmount] DECIMAL(18,2) NOT NULL,
-                            [PaymentMethod] NVARCHAR(20) DEFAULT 'Cash' NOT NULL,
-                            [Status] NVARCHAR(20) DEFAULT 'Pending' NOT NULL,
-                            [InvoicePdfUrl] NVARCHAR(500),
-                            [IdempotencyKey] NVARCHAR(100),
-                            [PaymentReference] NVARCHAR(200),
-                            [Notes] NVARCHAR(500),
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [BillItems] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BillId] INT NOT NULL REFERENCES [Bills]([Id]) ON DELETE CASCADE,
-                            [ServiceId] INT NOT NULL REFERENCES [Services]([Id]),
-                            [ServiceName] NVARCHAR(200) NOT NULL,
-                            [UnitPrice] DECIMAL(18,2) NOT NULL,
-                            [Quantity] INT DEFAULT 1 NOT NULL,
-                            [ItemType] NVARCHAR(50) DEFAULT 'Service' NOT NULL,
-                            [LineTotal] DECIMAL(18,2) NOT NULL,
-                            [HSNCode] NVARCHAR(20),
-                            [SACCode] NVARCHAR(20),
-                            [TaxableValue] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [TaxRate] DECIMAL(5,2) DEFAULT 18.00 NOT NULL,
-                            [CGSTRate] DECIMAL(5,2) DEFAULT 9.00 NOT NULL,
-                            [CGSTAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [SGSTRate] DECIMAL(5,2) DEFAULT 9.00 NOT NULL,
-                            [SGSTAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [IGSTRate] DECIMAL(5,2) DEFAULT 0 NOT NULL,
-                            [IGSTAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [CessRate] DECIMAL(5,2) DEFAULT 0 NOT NULL,
-                            [CessAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [Expenses] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [Description] NVARCHAR(500) NOT NULL,
-                            [Amount] DECIMAL(18,2) NOT NULL,
-                            [Category] NVARCHAR(100) NOT NULL,
-                            [ExpenseDate] DATETIME2 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [Purchases] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [VendorName] NVARCHAR(200) NOT NULL,
-                            [InvoiceNumber] NVARCHAR(100),
-                            [Subtotal] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [TaxAmount] DECIMAL(18,2) DEFAULT 0 NOT NULL,
-                            [TotalAmount] DECIMAL(18,2) NOT NULL,
-                            [Status] NVARCHAR(50) DEFAULT 'Paid' NOT NULL,
-                            [PurchaseDate] DATETIME2 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [PurchaseItems] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [PurchaseId] INT NOT NULL REFERENCES [Purchases]([Id]) ON DELETE CASCADE,
-                            [InventoryItemId] INT REFERENCES [InventoryItems]([Id]),
-                            [ItemName] NVARCHAR(200) NOT NULL,
-                            [UnitPrice] DECIMAL(18,2) NOT NULL,
-                            [Quantity] INT DEFAULT 1 NOT NULL,
-                            [LineTotal] DECIMAL(18,2) NOT NULL
-                        )",
-
-                        @"CREATE TABLE [WhatsAppAccounts] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT NOT NULL REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [MetaBusinessId] NVARCHAR(100),
-                            [WabaId] NVARCHAR(100),
-                            [PhoneNumberId] NVARCHAR(100),
-                            [DisplayPhoneNumber] NVARCHAR(30),
-                            [AccessToken] NVARCHAR(1000),
-                            [TokenExpiry] DATETIME2,
-                            [Status] NVARCHAR(20) DEFAULT 'Pending' NOT NULL,
-                            [ConnectedAt] DATETIME2 NOT NULL,
-                            [DisconnectedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [WhatsAppTemplates] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [WhatsAppAccountId] INT NOT NULL REFERENCES [WhatsAppAccounts]([Id]) ON DELETE CASCADE,
-                            [TemplateName] NVARCHAR(100) NOT NULL,
-                            [Language] NVARCHAR(20) DEFAULT 'en' NOT NULL,
-                            [Category] NVARCHAR(30) DEFAULT 'UTILITY' NOT NULL,
-                            [BodyText] NVARCHAR(2000),
-                            [Status] NVARCHAR(30) DEFAULT 'PENDING' NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [MessageLogs] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [WhatsAppAccountId] INT NOT NULL REFERENCES [WhatsAppAccounts]([Id]) ON DELETE CASCADE,
-                            [BillId] INT REFERENCES [Bills]([Id]),
-                            [RecipientPhone] NVARCHAR(20) NOT NULL,
-                            [MessageType] NVARCHAR(20) DEFAULT 'text' NOT NULL,
-                            [MetaMessageId] NVARCHAR(200),
-                            [Status] NVARCHAR(20) DEFAULT 'Queued' NOT NULL,
-                            [SentAt] DATETIME2 NOT NULL,
-                            [DeliveredAt] DATETIME2,
-                            [ReadAt] DATETIME2,
-                            [FailedReason] NVARCHAR(500)
-                        )",
-
-                        @"CREATE TABLE [UserRefreshTokens] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [UserId] INT NOT NULL REFERENCES [Users]([Id]) ON DELETE CASCADE,
-                            [Token] NVARCHAR(500) NOT NULL UNIQUE,
-                            [ExpiryTime] DATETIME2 NOT NULL,
-                            [IsRevoked] BIT DEFAULT 0 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [PendingRegistrations] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Token] NVARCHAR(100) NOT NULL UNIQUE,
-                            [Email] NVARCHAR(256) NOT NULL,
-                            [Username] NVARCHAR(100) NOT NULL,
-                            [PasswordHash] VARBINARY(MAX) NOT NULL,
-                            [PasswordSalt] VARBINARY(MAX) NOT NULL,
-                            [LegalName] NVARCHAR(200) NOT NULL,
-                            [Phone] NVARCHAR(20),
-                            [GstIn] NVARCHAR(50),
-                            [Address] NVARCHAR(500),
-                            [SelectedPlanId] INT DEFAULT 1 NOT NULL,
-                            [RazorpayCustomerId] NVARCHAR(100),
-                            [RazorpaySubscriptionId] NVARCHAR(100),
-                            [Status] NVARCHAR(50) DEFAULT 'PendingPayment' NOT NULL,
-                            [ReminderEmailSent] BIT DEFAULT 0 NOT NULL,
-                            [ReminderEmailSentAt] DATETIME2,
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [ExpiresAt] DATETIME2 NOT NULL,
-                            [RawRegistrationData] NVARCHAR(MAX)
-                        )",
-
-                        @"CREATE TABLE [PaymentTransactions] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT REFERENCES [Businesses]([Id]),
-                            [RazorpayPaymentId] NVARCHAR(100),
-                            [RazorpayOrderId] NVARCHAR(100),
-                            [RazorpaySubscriptionId] NVARCHAR(100),
-                            [Amount] DECIMAL(18,2) NOT NULL,
-                            [Status] NVARCHAR(50) NOT NULL,
-                            [PaymentMethod] NVARCHAR(50),
-                            [RawWebhookPayload] NVARCHAR(MAX),
-                            [FailureReason] NVARCHAR(500),
-                            [RetryCount] INT DEFAULT 0 NOT NULL,
-                            [WebhookEventId] INT,
-                            [CorrelationId] NVARCHAR(100),
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [UpdatedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [AuditLogs] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT,
-                            [EntityType] NVARCHAR(50) NOT NULL,
-                            [EntityId] INT,
-                            [Action] NVARCHAR(50) NOT NULL,
-                            [OldValues] NVARCHAR(MAX),
-                            [NewValues] NVARCHAR(MAX),
-                            [PerformedBy] NVARCHAR(100),
-                            [IpAddress] NVARCHAR(50),
-                            [UserAgent] NVARCHAR(500),
-                            [CorrelationId] NVARCHAR(100),
-                            [Description] NVARCHAR(1000),
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [WebhookEventLogs] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Source] NVARCHAR(50) NOT NULL,
-                            [ExternalEventId] NVARCHAR(200),
-                            [EventType] NVARCHAR(100) NOT NULL,
-                            [RawPayload] NVARCHAR(MAX),
-                            [ProcessingStatus] NVARCHAR(30) DEFAULT 'Received' NOT NULL,
-                            [FailureReason] NVARCHAR(2000),
-                            [RetryCount] INT DEFAULT 0 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL,
-                            [ProcessedAt] DATETIME2
-                        )",
-
-                        @"CREATE TABLE [TaxCategories] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [BusinessId] INT REFERENCES [Businesses]([Id]) ON DELETE CASCADE,
-                            [Name] NVARCHAR(100) NOT NULL,
-                            [TaxType] NVARCHAR(20) DEFAULT 'Goods' NOT NULL,
-                            [HSNCode] NVARCHAR(20),
-                            [SACCode] NVARCHAR(20),
-                            [GSTPercentage] DECIMAL(5,2) DEFAULT 18.00 NOT NULL,
-                            [CGSTPercentage] DECIMAL(5,2) DEFAULT 9.00 NOT NULL,
-                            [SGSTPercentage] DECIMAL(5,2) DEFAULT 9.00 NOT NULL,
-                            [IGSTPercentage] DECIMAL(5,2) DEFAULT 18.00 NOT NULL,
-                            [CessPercentage] DECIMAL(5,2) DEFAULT 0.00 NOT NULL,
-                            [IsActive] BIT DEFAULT 1 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [HSNMasters] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Code] NVARCHAR(20) NOT NULL,
-                            [Description] NVARCHAR(500) NOT NULL,
-                            [SearchTerms] NVARCHAR(500),
-                            [UQC] NVARCHAR(20) DEFAULT 'PCS' NOT NULL,
-                            [DefaultGSTPercentage] DECIMAL(5,2) DEFAULT 18.00 NOT NULL,
-                            [IsActive] BIT DEFAULT 1 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [SACMasters] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Code] NVARCHAR(20) NOT NULL,
-                            [Description] NVARCHAR(500) NOT NULL,
-                            [SearchTerms] NVARCHAR(500),
-                            [DefaultGSTPercentage] DECIMAL(5,2) DEFAULT 18.00 NOT NULL,
-                            [IsActive] BIT DEFAULT 1 NOT NULL
-                        )",
-
-                        @"CREATE TABLE [BusinessTypeMasters] (
-                            [Id] INT IDENTITY(1,1) PRIMARY KEY,
-                            [Code] NVARCHAR(100) NOT NULL,
-                            [Name] NVARCHAR(150) NOT NULL,
-                            [Category] NVARCHAR(100) NOT NULL,
-                            [IconName] NVARCHAR(50) DEFAULT 'Store' NOT NULL,
-                            [SellingModel] NVARCHAR(50) DEFAULT 'GOODS_AND_SERVICES' NOT NULL,
-                            [AliasesJson] NVARCHAR(MAX),
-                            [DefaultFeaturesJson] NVARCHAR(MAX),
-                            [DefaultTerminologyJson] NVARCHAR(MAX),
-                            [IsActive] BIT DEFAULT 1 NOT NULL,
-                            [CreatedAt] DATETIME2 NOT NULL
-                        )"
-                    };
-
-                    foreach (var sql in createTableSqls)
-                    {
-                        context.Database.ExecuteSqlRaw(sql);
-                    }
-                    Console.WriteLine("✓ 26 SQL Server tables created cleanly matching all Entity models.");
-
-                    Console.WriteLine("\n[3/3] Seeding baseline Master Data & Subscription Plans...");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [SubscriptionPlans] ([Name], [RazorpayPlanIdMonthly], [RazorpayPlanIdYearly], [MonthlyPrice], [YearlyPrice], [MaxBranches], [MaxStaff], [IsActive]) 
-                        VALUES ('Starter Plan', 'plan_starter_m', 'plan_starter_y', 499, 4990, 1, 2, 1)");
-
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [SubscriptionPlans] ([Name], [RazorpayPlanIdMonthly], [RazorpayPlanIdYearly], [MonthlyPrice], [YearlyPrice], [MaxBranches], [MaxStaff], [IsActive]) 
-                        VALUES ('Growth Plan', 'plan_growth_m', 'plan_growth_y', 1499, 14990, 5, 10, 1)");
-
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [SubscriptionPlans] ([Name], [RazorpayPlanIdMonthly], [RazorpayPlanIdYearly], [MonthlyPrice], [YearlyPrice], [MaxBranches], [MaxStaff], [IsActive]) 
-                        VALUES ('Enterprise Plan', 'plan_enterprise_m', 'plan_enterprise_y', 4999, 49990, 99, 999, 1)");
-
-                    Console.WriteLine("✓ Subscription Plans seeded successfully.");
-
-                    // Seed Tax Categories
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('Standard Goods (18%)', 'Goods', '9999', NULL, 18.00, 9.00, 9.00, 18.00, 0.00, 1, GETUTCDATE())");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('Reduced Goods (5%)', 'Goods', '1001', NULL, 5.00, 2.50, 2.50, 5.00, 0.00, 1, GETUTCDATE())");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('Essential / Exempt (0%)', 'Goods', '0000', NULL, 0.00, 0.00, 0.00, 0.00, 0.00, 1, GETUTCDATE())");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('Luxury Goods (28% + Cess)', 'Goods', '8703', NULL, 28.00, 14.00, 14.00, 28.00, 12.00, 1, GETUTCDATE())");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('Restaurant Service (5%)', 'Services', NULL, '996331', 5.00, 2.50, 2.50, 5.00, 0.00, 1, GETUTCDATE())");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('IT & Professional Services (18%)', 'Services', NULL, '998313', 18.00, 9.00, 9.00, 18.00, 0.00, 1, GETUTCDATE())");
-                    context.Database.ExecuteSqlRaw(@"
-                        INSERT INTO [TaxCategories] ([Name], [TaxType], [HSNCode], [SACCode], [GSTPercentage], [CGSTPercentage], [SGSTPercentage], [IGSTPercentage], [CessPercentage], [IsActive], [CreatedAt])
-                        VALUES ('Personal Care / Salon (18%)', 'Services', NULL, '999721', 18.00, 9.00, 9.00, 18.00, 0.00, 1, GETUTCDATE())");
-
-                    Console.WriteLine("✓ Tax Categories seeded successfully.");
-
-                    // Seed Business Type Masters
-                    context.Database.ExecuteSqlRaw(@"
-                        SET IDENTITY_INSERT [BusinessTypeMasters] ON;
-                        INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
-                        VALUES (1, 'restaurant', 'Restaurant', 'Food & Hospitality', 'Utensils', 'GOODS_AND_SERVICES', '[""hotel"",""dine in"",""eatery"",""food court"",""dhaba""]', '{""products"":true,""services"":false,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Menu Item"",""plural"":""Menu Items""},""service"":{""singular"":""Dining Service"",""plural"":""Dining Services""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Order / Bill"",""plural"":""Orders / Bills""},""inventory"":{""singular"":""Ingredient Stock"",""plural"":""Ingredient Stock""},""purchase"":{""singular"":""Ingredient Purchase"",""plural"":""Ingredient Purchases""},""supplier"":{""singular"":""Vendor / Supplier"",""plural"":""Vendors & Suppliers""},""staff"":{""singular"":""Staff / Waiter"",""plural"":""Staff & Waiters""}}', 1, GETUTCDATE());
-                        SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
-
-                    context.Database.ExecuteSqlRaw(@"
-                        SET IDENTITY_INSERT [BusinessTypeMasters] ON;
-                        INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
-                        VALUES (2, 'tiffin_center', 'Tiffin Center / Mess', 'Food & Hospitality', 'Soup', 'GOODS_ONLY', '[""mess"",""tiffin"",""canteen"",""fast food"",""food stall"",""tiffin service""]', '{""products"":true,""services"":false,""inventory"":false,""appointments"":false,""customers"":true,""staff"":false,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Food Item"",""plural"":""Food Items""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Bill"",""plural"":""Bills""}}', 1, GETUTCDATE());
-                        SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
-
-                    context.Database.ExecuteSqlRaw(@"
-                        SET IDENTITY_INSERT [BusinessTypeMasters] ON;
-                        INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
-                        VALUES (3, 'grocery_kirana', 'Grocery / Kirana Store', 'Retail', 'ShoppingCart', 'GOODS_ONLY', '[""kirana"",""grocery"",""provision store"",""super market"",""general store"",""departmental store""]', '{""products"":true,""services"":false,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Product"",""plural"":""Products""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Bill"",""plural"":""Bills""},""inventory"":{""singular"":""Stock"",""plural"":""Stock & Inventory""}}', 1, GETUTCDATE());
-                        SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
-
-                    context.Database.ExecuteSqlRaw(@"
-                        SET IDENTITY_INSERT [BusinessTypeMasters] ON;
-                        INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
-                        VALUES (4, 'general_retail', 'General Retail Store', 'Retail', 'Store', 'GOODS_AND_SERVICES', '[""general"",""other"",""retail"",""shop""]', '{""products"":true,""services"":true,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Product"",""plural"":""Products""},""service"":{""singular"":""Service"",""plural"":""Services""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Bill / Invoice"",""plural"":""Bills & Invoices""}}', 1, GETUTCDATE());
-                        SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
-
-                    Console.WriteLine("✓ Business Type Masters seeded successfully.");
-
-                    Console.WriteLine("\n[4/4] Verification: Checking existing tables in SQL Server DB...");
+                    Console.WriteLine("\n[Verification] Tables and seed counts:");
                     using (var cmd = context.Database.GetDbConnection().CreateCommand())
                     {
-                        if (cmd.Connection.State != System.Data.ConnectionState.Open)
+                        if (cmd.Connection!.State != System.Data.ConnectionState.Open)
                             cmd.Connection.Open();
-                        cmd.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME";
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            int count = 0;
-                            Console.WriteLine("Found the following tables in SQL Server Database:");
-                            while (reader.Read())
-                            {
-                                count++;
-                                Console.WriteLine($"  {count}. {reader.GetString(0)}");
-                            }
-                            Console.WriteLine($"Total Tables Count in DB: {count}");
-                        }
+                        cmd.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
+                        Console.WriteLine($"  Tables: {cmd.ExecuteScalar()}");
+                        cmd.CommandText = "SELECT COUNT(*) FROM [SubscriptionPlans]";
+                        Console.WriteLine($"  SubscriptionPlans: {cmd.ExecuteScalar()}");
+                        cmd.CommandText = "SELECT COUNT(*) FROM [TaxCategories]";
+                        Console.WriteLine($"  TaxCategories: {cmd.ExecuteScalar()}");
+                        cmd.CommandText = "SELECT COUNT(*) FROM [AppFeatures]";
+                        Console.WriteLine($"  AppFeatures: {cmd.ExecuteScalar()}");
                     }
 
                     Console.WriteLine("\n==================================================");
-                    Console.WriteLine("SUCCESS: SQL Server Database schema & migration updated!");
+                    Console.WriteLine("SUCCESS: SQL Server Database schema & seeds ready!");
                     Console.WriteLine("==================================================");
+                    return 0;
                 }
                 catch (Exception ex)
                 {
@@ -569,8 +158,189 @@ namespace BillingBackend.Migrator
                     Console.WriteLine($"\n[ERROR] Migration failed: {ex.Message}");
                     Console.WriteLine(ex.StackTrace);
                     Console.ResetColor();
+                    return 1;
                 }
             }
+        }
+
+        private static string? GetArgValue(string[] args, string name)
+        {
+            for (int i = 0; i + 1 < args.Length; i++)
+            {
+                if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                    return args[i + 1];
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Values mirror the HasData seeds in BillingDbContext. Only fills empty tables,
+        /// so re-runs are safe. Explicit IDs require IDENTITY_INSERT on the same session,
+        /// so the connection is held open for the whole seeding block.
+        /// </summary>
+        private static void SeedReferenceData(BillingDbContext context)
+        {
+            var conn = context.Database.GetDbConnection();
+            bool wasClosed = conn.State != System.Data.ConnectionState.Open;
+            if (wasClosed) conn.Open();
+            try
+            {
+                SeedPlans(context);
+                SeedTaxCategories(context);
+                SeedHsn(context);
+                SeedSac(context);
+                SeedBusinessTypes(context);
+            }
+            finally
+            {
+                if (wasClosed && conn.State != System.Data.ConnectionState.Closed) conn.Close();
+            }
+        }
+
+        private static void WithIdentityInsert(BillingDbContext context, string table, Action seed)
+        {
+            context.Database.ExecuteSqlRaw($"SET IDENTITY_INSERT [{table}] ON;");
+            try
+            {
+                seed();
+            }
+            finally
+            {
+                context.Database.ExecuteSqlRaw($"SET IDENTITY_INSERT [{table}] OFF;");
+            }
+        }
+
+        private static void SeedPlans(BillingDbContext context)
+        {
+            if (context.SubscriptionPlans.Any()) return;
+            WithIdentityInsert(context, "SubscriptionPlans", () =>
+            {
+                context.SubscriptionPlans.AddRange(
+                    new SubscriptionPlan
+                    {
+                        Id = 1,
+                        Name = "Starter Shop",
+                        Subtitle = "Ideal for Single Kirana, Small Cafes & Standalone Stores",
+                        RazorpayPlanIdMonthly = "plan_starter_monthly",
+                        RazorpayPlanIdYearly = "plan_starter_yearly",
+                        MonthlyPrice = 499.00m,
+                        YearlyPrice = 4999.00m,
+                        MaxBranches = 1,
+                        MaxStaff = 2,
+                        IsPopular = false,
+                        DisplayOrder = 1,
+                        FeaturesJson = """[{"text":"Single Store & Counter POS","included":true},{"text":"2 Cashier Staff Accounts","included":true},{"text":"Thermal & A4 Tax Invoice Printing","included":true},{"text":"Customer Udhar Khata Ledger","included":true},{"text":"Stock Warning Alerts","included":true},{"text":"Multi-Branch Franchise Sync","included":false},{"text":"Stylist Commission Calculator","included":false}]""",
+                        IsActive = true
+                    },
+                    new SubscriptionPlan
+                    {
+                        Id = 2,
+                        Name = "Growth Business",
+                        Subtitle = "Perfect for High-Volume Retailers, Salons & Restaurants",
+                        RazorpayPlanIdMonthly = "plan_growth_monthly",
+                        RazorpayPlanIdYearly = "plan_growth_yearly",
+                        MonthlyPrice = 999.00m,
+                        YearlyPrice = 9999.00m,
+                        MaxBranches = 3,
+                        MaxStaff = 10,
+                        IsPopular = true,
+                        DisplayOrder = 2,
+                        FeaturesJson = """[{"text":"Up to 3 Store Outlets","included":true},{"text":"10 Staff Accounts & Role Controls","included":true},{"text":"Automated DLT SMS Receipts","included":true},{"text":"Barcode & Electronic Scale Integration","included":true},{"text":"Kitchen KOT & Table Layouts","included":true},{"text":"GST E-Invoicing & Tally Prime Sync","included":true},{"text":"Operating Expense & Profit Tracker","included":true}]""",
+                        IsActive = true
+                    },
+                    new SubscriptionPlan
+                    {
+                        Id = 3,
+                        Name = "Enterprise Chain",
+                        Subtitle = "Custom Architecture for Large Multi-City Franchises",
+                        RazorpayPlanIdMonthly = "plan_enterprise_monthly",
+                        RazorpayPlanIdYearly = "plan_enterprise_yearly",
+                        MonthlyPrice = 2499.00m,
+                        YearlyPrice = 24999.00m,
+                        MaxBranches = 25,
+                        MaxStaff = 50,
+                        IsPopular = false,
+                        DisplayOrder = 3,
+                        FeaturesJson = """[{"text":"Unlimited Outlets & Central Warehouse","included":true},{"text":"50 Staff Accounts with Role Controls","included":true},{"text":"Dedicated Account Manager & 24/7 SLA","included":true},{"text":"Custom ERP & Tally 2-Way Sync","included":true},{"text":"Multi-Branch Royalty & P&L Analytics","included":true},{"text":"High-Throughput Exotel DLT SMS","included":true}]""",
+                        IsActive = true
+                    });
+                context.SaveChanges();
+            });
+        }
+
+        private static void SeedTaxCategories(BillingDbContext context)
+        {
+            if (context.TaxCategories.Any()) return;
+            WithIdentityInsert(context, "TaxCategories", () =>
+            {
+                context.TaxCategories.AddRange(
+                    new TaxCategory { Id = 1, BusinessId = null, Name = "Standard Goods (18%)", TaxType = "Goods", HSNCode = "9999", GSTPercentage = 18.00m, CGSTPercentage = 9.00m, SGSTPercentage = 9.00m, IGSTPercentage = 18.00m, CessPercentage = 0.00m },
+                    new TaxCategory { Id = 2, BusinessId = null, Name = "Reduced Goods (5%)", TaxType = "Goods", HSNCode = "1001", GSTPercentage = 5.00m, CGSTPercentage = 2.50m, SGSTPercentage = 2.50m, IGSTPercentage = 5.00m, CessPercentage = 0.00m },
+                    new TaxCategory { Id = 3, BusinessId = null, Name = "Essential / Exempt (0%)", TaxType = "Goods", HSNCode = "0000", GSTPercentage = 0.00m, CGSTPercentage = 0.00m, SGSTPercentage = 0.00m, IGSTPercentage = 0.00m, CessPercentage = 0.00m },
+                    new TaxCategory { Id = 4, BusinessId = null, Name = "Luxury Goods (28% + Cess)", TaxType = "Goods", HSNCode = "8703", GSTPercentage = 28.00m, CGSTPercentage = 14.00m, SGSTPercentage = 14.00m, IGSTPercentage = 28.00m, CessPercentage = 12.00m },
+                    new TaxCategory { Id = 5, BusinessId = null, Name = "Restaurant Service (5%)", TaxType = "Services", SACCode = "996331", GSTPercentage = 5.00m, CGSTPercentage = 2.50m, SGSTPercentage = 2.50m, IGSTPercentage = 5.00m, CessPercentage = 0.00m },
+                    new TaxCategory { Id = 6, BusinessId = null, Name = "IT & Professional Services (18%)", TaxType = "Services", SACCode = "998313", GSTPercentage = 18.00m, CGSTPercentage = 9.00m, SGSTPercentage = 9.00m, IGSTPercentage = 18.00m, CessPercentage = 0.00m },
+                    new TaxCategory { Id = 7, BusinessId = null, Name = "Personal Care / Salon (18%)", TaxType = "Services", SACCode = "999721", GSTPercentage = 18.00m, CGSTPercentage = 9.00m, SGSTPercentage = 9.00m, IGSTPercentage = 18.00m, CessPercentage = 0.00m });
+                context.SaveChanges();
+            });
+        }
+
+        private static void SeedHsn(BillingDbContext context)
+        {
+            if (context.HSNMasters.Any()) return;
+            WithIdentityInsert(context, "HSNMasters", () =>
+            {
+                context.HSNMasters.AddRange(
+                    new HSNMaster { Id = 1, Code = "6109", Description = "T-shirts, singlets and other vests, knitted or crocheted", SearchTerms = "tshirt t-shirt shirt clothing garment apparel", UQC = "PCS", DefaultGSTPercentage = 5.00m },
+                    new HSNMaster { Id = 2, Code = "1006", Description = "Rice, husk rice, husked rice, semi-milled or wholly milled rice", SearchTerms = "rice grocery grain kirana food basmati", UQC = "KGS", DefaultGSTPercentage = 5.00m },
+                    new HSNMaster { Id = 3, Code = "1701", Description = "Cane or beet sugar and chemically pure sucrose, in solid form", SearchTerms = "sugar grocery sweet kirana", UQC = "KGS", DefaultGSTPercentage = 5.00m },
+                    new HSNMaster { Id = 4, Code = "8517", Description = "Telephone sets, including smartphones and other apparatus for cellular networks", SearchTerms = "mobile phone smartphone electronics laptop computer accessory", UQC = "PCS", DefaultGSTPercentage = 18.00m },
+                    new HSNMaster { Id = 5, Code = "3004", Description = "Medicaments consisting of mixed or unmixed products for therapeutic uses", SearchTerms = "medicine tablet capsule pharmacy medical drug doctor syrup", UQC = "BOX", DefaultGSTPercentage = 12.00m },
+                    new HSNMaster { Id = 6, Code = "1905", Description = "Bread, pastry, cakes, biscuits and other bakers wares", SearchTerms = "bakery bread biscuit cake pastry cookies snack", UQC = "PCS", DefaultGSTPercentage = 18.00m });
+                context.SaveChanges();
+            });
+        }
+
+        private static void SeedSac(BillingDbContext context)
+        {
+            if (context.SACMasters.Any()) return;
+            WithIdentityInsert(context, "SACMasters", () =>
+            {
+                context.SACMasters.AddRange(
+                    new SACMaster { Id = 1, Code = "996331", Description = "Services provided by restaurants, cafes and other similar eating establishments", SearchTerms = "restaurant food idly dosa coffee mess tiffin dining cloud kitchen hotel", DefaultGSTPercentage = 5.00m },
+                    new SACMaster { Id = 2, Code = "998313", Description = "Information technology (IT) design and development services for applications", SearchTerms = "software web development IT services consulting computer programming website app", DefaultGSTPercentage = 18.00m },
+                    new SACMaster { Id = 3, Code = "999721", Description = "Hairdressing and beauty treatment services, salon, spa and personal care", SearchTerms = "salon barber haircut beauty parlour spa facial styling makeup massage", DefaultGSTPercentage = 18.00m },
+                    new SACMaster { Id = 4, Code = "998713", Description = "Maintenance and repair services of computers, mobile phones and consumer electronics", SearchTerms = "repair maintenance laptop computer fixing service mobile hardware", DefaultGSTPercentage = 18.00m });
+                context.SaveChanges();
+            });
+        }
+
+        private static void SeedBusinessTypes(BillingDbContext context)
+        {
+            if (context.BusinessTypeMasters.Any()) return;
+                context.Database.ExecuteSqlRaw(@"
+                    SET IDENTITY_INSERT [BusinessTypeMasters] ON;
+                    INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
+                    VALUES (1, 'restaurant', 'Restaurant', 'Food & Hospitality', 'Utensils', 'GOODS_AND_SERVICES', '[""hotel"",""dine in"",""eatery"",""food court"",""dhaba""]', '{""products"":true,""services"":false,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Menu Item"",""plural"":""Menu Items""},""service"":{""singular"":""Dining Service"",""plural"":""Dining Services""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Order / Bill"",""plural"":""Orders / Bills""},""inventory"":{""singular"":""Ingredient Stock"",""plural"":""Ingredient Stock""},""purchase"":{""singular"":""Ingredient Purchase"",""plural"":""Ingredient Purchases""},""supplier"":{""singular"":""Vendor / Supplier"",""plural"":""Vendors & Suppliers""},""staff"":{""singular"":""Staff / Waiter"",""plural"":""Staff & Waiters""}}', 1, GETUTCDATE());
+                    SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
+
+                context.Database.ExecuteSqlRaw(@"
+                    SET IDENTITY_INSERT [BusinessTypeMasters] ON;
+                    INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
+                    VALUES (2, 'tiffin_center', 'Tiffin Center / Mess', 'Food & Hospitality', 'Soup', 'GOODS_ONLY', '[""mess"",""tiffin"",""canteen"",""fast food"",""food stall"",""tiffin service""]', '{""products"":true,""services"":false,""inventory"":false,""appointments"":false,""customers"":true,""staff"":false,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Food Item"",""plural"":""Food Items""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Bill"",""plural"":""Bills""}}', 1, GETUTCDATE());
+                    SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
+
+                context.Database.ExecuteSqlRaw(@"
+                    SET IDENTITY_INSERT [BusinessTypeMasters] ON;
+                    INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
+                    VALUES (3, 'grocery_kirana', 'Grocery / Kirana Store', 'Retail', 'ShoppingCart', 'GOODS_ONLY', '[""kirana"",""grocery"",""provision store"",""super market"",""general store"",""departmental store""]', '{""products"":true,""services"":false,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Product"",""plural"":""Products""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Bill"",""plural"":""Bills""},""inventory"":{""singular"":""Stock"",""plural"":""Stock & Inventory""}}', 1, GETUTCDATE());
+                    SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
+
+                context.Database.ExecuteSqlRaw(@"
+                    SET IDENTITY_INSERT [BusinessTypeMasters] ON;
+                    INSERT INTO [BusinessTypeMasters] ([Id], [Code], [Name], [Category], [IconName], [SellingModel], [AliasesJson], [DefaultFeaturesJson], [DefaultTerminologyJson], [IsActive], [CreatedAt])
+                    VALUES (4, 'general_retail', 'General Retail Store', 'Retail', 'Store', 'GOODS_AND_SERVICES', '[""general"",""other"",""retail"",""shop""]', '{""products"":true,""services"":true,""inventory"":true,""appointments"":false,""customers"":true,""staff"":true,""khata"":true,""purchases"":true,""expenses"":true}', '{""product"":{""singular"":""Product"",""plural"":""Products""},""customer"":{""singular"":""Customer"",""plural"":""Customers""},""invoice"":{""singular"":""Bill / Invoice"",""plural"":""Bills & Invoices""}}', 1, GETUTCDATE());
+                    SET IDENTITY_INSERT [BusinessTypeMasters] OFF;");
         }
     }
 }

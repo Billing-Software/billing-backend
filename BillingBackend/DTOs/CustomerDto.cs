@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using BillingBackend.Validation;
 
 namespace BillingBackend.DTOs
 {
@@ -12,6 +13,7 @@ namespace BillingBackend.DTOs
         public string Name { get; set; } = string.Empty;
 
         [StringLength(20)]
+        [RegularExpression(ValidationPatterns.PhoneIntl, ErrorMessage = "Phone must be a valid 8-15 digit number, optionally starting with +.")]
         public string? Phone { get; set; }
 
         [EmailAddress]

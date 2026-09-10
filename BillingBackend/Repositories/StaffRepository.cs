@@ -1,11 +1,10 @@
 using BillingBackend.Data;
 using BillingBackend.Data.Entities;
+using BillingBackend.Security;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace BillingBackend.Repositories
@@ -48,24 +47,33 @@ namespace BillingBackend.Repositories
                 .ToListAsync();
         }
 
+        private static string NormalizeStaffRole(string? role)
+        {
+            if (!string.IsNullOrWhiteSpace(role) && PasswordPolicy.StaffRoles.Contains(role.Trim()))
+                return role.Trim();
+            return "Staff";
+        }
+
         public async Task<StaffMember> AddAsync(StaffMember staff, string password)
         {
+            var (pwOk, pwError) = PasswordPolicy.Validate(password);
+            if (!pwOk)
+                throw new InvalidOperationException(pwError ?? "Staff password does not meet policy. Provide a strong temporary password.");
+
             using (var transaction = await _context.Database.BeginTransactionAsync())
             {
                 try
                 {
-                    // Create associated User record
-                    using var hmac = new HMACSHA512();
-                    var passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
-                    var passwordSalt = hmac.Key;
+                    PasswordHasher.CreateHash(password, out var passwordHash, out var passwordSalt);
 
+                    var safeRole = NormalizeStaffRole(staff.Role);
                     var user = new User
                     {
                         Username = staff.Contact ?? staff.EmpCode,
                         Email = staff.Contact ?? $"{staff.EmpCode.ToLower()}@business{staff.BusinessId}.com",
                         PasswordHash = passwordHash,
                         PasswordSalt = passwordSalt,
-                        Role = staff.Role,
+                        Role = safeRole,
                         CreatedAt = DateTime.UtcNow
                     };
 
@@ -74,6 +82,7 @@ namespace BillingBackend.Repositories
 
                     // Assign the created UserId
                     staff.UserId = user.Id;
+                    staff.Role = safeRole;
                     staff.CreatedAt = DateTime.UtcNow;
 
                     await _context.StaffMembers.AddAsync(staff);
@@ -102,6 +111,8 @@ namespace BillingBackend.Repositories
                         throw new KeyNotFoundException($"Staff member with ID {staff.Id} for Business {staff.BusinessId} not found");
                     }
 
+                    var safeRole = NormalizeStaffRole(staff.Role);
+
                     if (existing.UserId.HasValue)
                     {
                         var user = await _context.Users.FindAsync(existing.UserId.Value);
@@ -109,23 +120,28 @@ namespace BillingBackend.Repositories
                         {
                             user.Username = staff.Contact ?? existing.Contact ?? staff.EmpCode;
                             user.Email = staff.Contact ?? existing.Contact ?? $"{staff.EmpCode.ToLower()}@business{staff.BusinessId}.com";
-                            user.Role = staff.Role;
+                            user.Role = safeRole;
 
                             if (!string.IsNullOrEmpty(password))
                             {
-                                using var hmac = new HMACSHA512();
-                                user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
-                                user.PasswordSalt = hmac.Key;
+                                var (pwOk, pwError) = PasswordPolicy.Validate(password);
+                                if (!pwOk)
+                                    throw new InvalidOperationException(pwError ?? "Password does not meet policy.");
+                                PasswordHasher.CreateHash(password, out var nh, out var ns);
+                                user.PasswordHash = nh;
+                                user.PasswordSalt = ns;
                             }
                             _context.Users.Update(user);
                         }
                     }
                     else
                     {
-                        using var hmac = new HMACSHA512();
-                        var pass = string.IsNullOrEmpty(password) ? "123456" : password;
-                        var passwordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(pass));
-                        var passwordSalt = hmac.Key;
+                        if (string.IsNullOrWhiteSpace(password))
+                            throw new InvalidOperationException("Password is required when creating login for existing staff.");
+                        var (pwOk, pwError) = PasswordPolicy.Validate(password);
+                        if (!pwOk)
+                            throw new InvalidOperationException(pwError ?? "Password does not meet policy.");
+                        PasswordHasher.CreateHash(password, out var passwordHash, out var passwordSalt);
 
                         var user = new User
                         {
@@ -133,7 +149,7 @@ namespace BillingBackend.Repositories
                             Email = staff.Contact ?? $"{staff.EmpCode.ToLower()}@business{staff.BusinessId}.com",
                             PasswordHash = passwordHash,
                             PasswordSalt = passwordSalt,
-                            Role = staff.Role,
+                            Role = safeRole,
                             CreatedAt = DateTime.UtcNow
                         };
 
@@ -145,7 +161,7 @@ namespace BillingBackend.Repositories
                     existing.Name = staff.Name;
                     existing.EmpCode = staff.EmpCode;
                     existing.Contact = staff.Contact;
-                    existing.Role = staff.Role;
+                    existing.Role = safeRole;
                     existing.Status = staff.Status;
                     existing.BranchId = staff.BranchId;
                     existing.UpdatedAt = DateTime.UtcNow;

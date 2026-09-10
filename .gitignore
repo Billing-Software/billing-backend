@@ -111,7 +111,21 @@ publish/
 .DS_Store
 Thumbs.db
 
-# Oracle Wallet directories & archives
+# Oracle Wallet directories & archives (root + project-level)
+wallet/
 BillingBackend/wallet/
+**/wallet/
+Wallet_*.zip
 *.zip
+
+# Environment secrets
+.env
+.env.*
+.env.local
+!.env.example
+
+# Publish profiles / deploy credentials — never commit
+*.publishSettings
+*.pubxml
+*.pubxml.user
 

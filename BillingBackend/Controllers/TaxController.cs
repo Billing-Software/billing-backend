@@ -28,7 +28,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error fetching tax categories.", error = ex.Message });
+                return StatusCode(500, new { message = "Error fetching tax categories.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -42,7 +42,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error creating tax category.", error = ex.Message });
+                return StatusCode(500, new { message = "Error creating tax category.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -56,7 +56,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error searching HSN codes.", error = ex.Message });
+                return StatusCode(500, new { message = "Error searching HSN codes.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -70,7 +70,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error searching SAC codes.", error = ex.Message });
+                return StatusCode(500, new { message = "Error searching SAC codes.", correlationId = HttpContext.TraceIdentifier });
             }
         }
 
@@ -84,7 +84,7 @@ namespace BillingBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Error calculating tax.", error = ex.Message });
+                return StatusCode(500, new { message = "Error calculating tax.", correlationId = HttpContext.TraceIdentifier });
             }
         }
     }
